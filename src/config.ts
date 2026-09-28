@@ -19,9 +19,17 @@ export const Z_REAR = 0;
 export const Z_FRONT = 11.74; // ground floor front wall (plan: 11740)
 export const Z_BATH_FRONT = 12.19; // first floor bath projection (plan: 12190)
 export const Z_LOT_REAR = -2.66;
+// Renovated bedroom's rear wall (shared with the relocated bathroom) sits under the ceiling beam left
+// by the old rear wall (z -0.1..0.1): its bathroom-side face is flush with the beam's south face.
+export const Z_RENOVATED_BED4_REAR = -0.1 + 0.12 / 2;
+export const RENOVATED_REAR_DOOR = { a: 2.65, b: 3.52 };
+// Renovated kitchen window: two-panel slider over the sink, west of the rear wall cabinet.
+export const RENOVATED_KITCHEN_WINDOW = { a: 3.72, b: 4.92, y0: 1.1, y1: 2.55 };
 export const Z_LOT_FRONT = 18.7; // 70 ft lot
 export const Z_BALCONY_FRONT = 16.45;
 export const Z_BALCONY_NOTCH = 15.02;
+// Front wall centre: 100 mm clear of the balcony return pillar's rear face.
+export const Z_MASTER_EXTENSION_FRONT = Z_BALCONY_NOTCH - 0.4;
 export const X_BALCONY_NOTCH = 0.97;
 
 // Levels
@@ -29,6 +37,8 @@ export const Y_GF = 0;
 export const Y_FF = 3.6; // Tingkat 1 (+3600)
 export const SLAB = 0.15;
 export const Y_GF_CEIL = Y_FF - SLAB; // 3.45 slab soffit
+// Renovated ground floor: flat plaster ceiling below every beam / dropped section (lowest 2.875 m).
+export const Y_RENOVATED_GF_CEIL = 2.85;
 export const Y_FF_CEIL = Y_FF + 3.05; // plaster ceiling
 export const Y_WALL_TOP = Y_FF + 3.35; // Paras Bumbung (+6950)
 export const Y_PORCH = -0.3; // porch floor at the foot of the entrance steps
@@ -78,7 +88,7 @@ export const Y_RIDGE = roofTop(Z_RIDGE);
  * lower roof whose rear slope matches the main roof but whose front slope sits
  * ROOF_DROP lower and dies behind the bathroom-box parapet (ridge ≈ 0.33 m lower).
  */
-export const X_ROOF_SPLIT = 4.4;
+export const X_ROOF_SPLIT = 3.94; // align the main roof edge with the master/ensuite wall
 export const ROOF_DROP = 0.65;
 export const Y_BATH_PARAPET = 6.5; // top of the bathroom box front wall
 export const Y_BATH1_CEIL = Y_FF + 2.1 + 2 * 0.3; // ensuite ceiling: light tiles to 2.1 m + two 0.3 m dark courses

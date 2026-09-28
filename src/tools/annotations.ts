@@ -1,9 +1,24 @@
 import * as THREE from 'three';
-import { ROOMS, type RoomInfo } from '../config';
+import { ROOMS, Z_MASTER_EXTENSION_FRONT, Z_RENOVATED_BED4_REAR, type RoomInfo } from '../config';
 import { canvasToTexture } from '../builder/textures';
 import { fmtLen, type Units } from './measure';
 
 const INK = '#1d2a36';
+
+/** room list with the renovation's changed rooms (also used by the feng shui overlay) */
+export function roomsFor(renovated: boolean): RoomInfo[] {
+  return ROOMS.map((original) => {
+    const r: RoomInfo = { ...original };
+    if (renovated) {
+      if (r.id === 'master') r.z1 = Z_MASTER_EXTENSION_FRONT - 0.1;
+      if (r.id === 'bed4') r.z0 = Z_RENOVATED_BED4_REAR + 0.06;
+      if (r.id === 'bath3') Object.assign(r, { x0: 0.05, x1: 1.84, z0: -2.56, z1: Z_RENOVATED_BED4_REAR - 0.06, y: 0.006 });
+      if (r.id === 'yard') Object.assign(r, { name: 'Rear extension', malay: 'Dapur basah', level: 'gf', x0: 1.96, z1: Z_RENOVATED_BED4_REAR - 0.06, y: 0 });
+      if (r.id === 'balcony') Object.assign(r, { x0: 3.88, z0: 12.29, labelOffset: [0, 0] });
+    }
+    return r;
+  });
+}
 
 function labelTexture(room: RoomInfo, units: Units) {
   const w = room.x1 - room.x0, d = room.z1 - room.z0;
@@ -59,6 +74,7 @@ export class Annotations {
   root = new THREE.Group();
   private inkMat = new THREE.MeshBasicMaterial({ color: INK, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   units: Units = 'metric';
+  renovated = false;
   private arrowGeo = (() => {
     const s = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(-0.15, 0.05), new THREE.Vector2(-0.15, -0.05)]);
     const g = new THREE.ShapeGeometry(s);
@@ -86,7 +102,7 @@ export class Annotations {
         }
       }
     }
-    for (const r of ROOMS) this.addRoom(r);
+    for (const r of roomsFor(this.renovated)) this.addRoom(r);
   }
 
   private flat(tex: THREE.Texture, w: number, h: number, x: number, y: number, z: number, rotZ = 0) {

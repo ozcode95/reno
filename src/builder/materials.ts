@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { W, T_PARTY } from '../config';
-import { plasterTexture, roofTileTexture, tileTexture, woodTexture, type TexSet } from './textures';
+import { plasterTexture, roofTileTexture, tileTexture, woodTexture, canvasToTexture, type TexSet } from './textures';
 
 type AnyMat = THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial;
 
@@ -86,7 +86,10 @@ async function loadSet(loader: THREE.TextureLoader, name: string, size: [number,
 
 export const INTERIOR_KEYS = [
   'wallInt', 'ceiling', 'floorTile', 'stairTile', 'bathWall', 'bathWallDark', 'bathFloor', 'kitchenTile',
-  'doorWood', 'doorBath', 'ceramic', 'chrome', 'stainless', 'plasticWhite', 'steelRail', 'frameSage',
+  'cabinet', 'worktop', 'doorWood', 'doorBath', 'ceramic', 'chrome', 'stainless', 'plasticWhite', 'steelRail', 'frameSage',
+  // interior design (日式简约风)
+  'jpOak', 'jpOakDark', 'jpLinen', 'jpLinenGrey', 'jpCushion', 'jpTatami', 'jpHeri', 'jpRug', 'jpWashi', 'jpLED',
+  'jpLacquer', 'jpGold', 'jpBrass', 'jpIncense', 'jpOrange', 'jpAltarRed', 'jpAltarPlaque', 'jpTudiPlaque',
 ];
 
 /**
@@ -207,6 +210,9 @@ export class MaterialLib {
     const woodMain = woodTexture({ px: 512, meters: [1.0, 2.4], base: '#b6581f', dark: '#8a3c12', grain: 0.35, grooves: 0.085, seed: 62, rough: 0.3 });
     const woodOak = woodTexture({ px: 512, meters: [0.9, 2.2], base: '#b89570', dark: '#8e6c4b', grain: 0.55, seed: 63, rough: 0.45 });
     const plaster = plasterTexture(512, 5, 0.9);
+    // interior design: pale ash / oak and a dark walnut accent
+    const woodPale = woodTexture({ px: 512, meters: [0.8, 2.0], base: '#d6b98f', dark: '#b39164', grain: 0.4, seed: 71, rough: 0.5 });
+    const woodDark = woodTexture({ px: 256, meters: [0.8, 2.0], base: '#6b4b33', dark: '#4a3122', grain: 0.45, seed: 72, rough: 0.45 });
 
     const S = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(p);
     const P = (p: THREE.MeshPhysicalMaterialParameters) => new THREE.MeshPhysicalMaterial(p);
@@ -216,8 +222,8 @@ export class MaterialLib {
     // The plaster / stucco sets only add relief (normal + roughness), no greyish colour map.
     let m: AnyMat = this.add('wallInt', S({ color: '#ffffff', roughness: 0.9 }), 0.55);
     applyTex(m, plaster, { normalScale: 0.35, map: false });
-    m = this.add('ceiling', S({ color: '#f5f5f1', roughness: 0.95 }), 0.6);
-    applyTex(m, plaster, { normalScale: 0.2, rough: false });
+    m = this.add('ceiling', S({ color: '#ffffff', roughness: 0.95 }), 0.6);
+    applyTex(m, plaster, { normalScale: 0.2, rough: false, map: false });
     m = this.add('wallExt', S({ color: '#ffffff', roughness: 0.95 }), 1);
     applyTex(m, stucco, { normalScale: 0.7, map: false });
     // car porch walls (lit by bounce light) + gate / boundary walls
@@ -239,13 +245,14 @@ export class MaterialLib {
     m = this.add('stairTile', P({ color: '#ffffff', roughness: 1, specularIntensity: 0.9 }), 0.6);
     applyTex(m, floor600);
     m = this.add('bathWall', S({ color: '#ffffff', roughness: 1 }), 0.6);
-    applyTex(m, bathWall);
+    // White throughout the interior; retain tile relief and surface roughness.
+    applyTex(m, bathWall, { map: false });
     m = this.add('bathWallDark', S({ color: '#ffffff', roughness: 1 }), 0.6);
-    applyTex(m, bathWallDark);
+    applyTex(m, bathWallDark, { map: false });
     m = this.add('bathFloor', S({ color: '#ffffff', roughness: 1 }), 0.6);
     applyTex(m, bathFloor);
     m = this.add('kitchenTile', S({ color: '#ffffff', roughness: 1 }), 0.6);
-    applyTex(m, kitchen);
+    applyTex(m, kitchen, { map: false });
     m = this.add('balconyTile', S({ color: '#ffffff', roughness: 1 }), 1);
     applyTex(m, balcony);
     m = this.add('concrete', S({ color: '#e2e2de', roughness: 1 }), 1);
@@ -275,6 +282,34 @@ export class MaterialLib {
     applyTex(m, woodOak);
     this.add('doorRear', S({ color: '#a6ada9', roughness: 0.38, metalness: 0.7 }), 0.6);
     this.add('frameSage', S({ color: '#86998f', roughness: 0.45, metalness: 0.2 }), 0.6);
+    // renovated L-shaped kitchen: matt laminate fronts and a dark quartz worktop
+    this.add('cabinet', S({ color: '#ecebe6', roughness: 0.5 }), 0.5);
+    this.add('worktop', P({ color: '#2f3133', roughness: 0.3, clearcoat: 0.5, clearcoatRoughness: 0.2 }), 0.6);
+    // --- interior design: 日式简约风 (Japanese minimalist) furniture
+    m = this.add('jpOak', P({ color: '#ffffff', roughness: 0.55, clearcoat: 0.12, clearcoatRoughness: 0.6 }), 0.5);
+    applyTex(m, woodPale, { normal: false });
+    m = this.add('jpOakDark', S({ color: '#ffffff', roughness: 0.5 }), 0.5);
+    applyTex(m, woodDark, { normal: false });
+    this.add('jpLinen', P({ color: '#eee8dc', roughness: 0.92, sheen: 0.4, sheenColor: '#ffffff', sheenRoughness: 0.8 }), 0.5);
+    this.add('jpLinenGrey', P({ color: '#b9b2a6', roughness: 0.95, sheen: 0.4, sheenColor: '#ffffff', sheenRoughness: 0.8 }), 0.5);
+    this.add('jpCushion', P({ color: '#8c9179', roughness: 0.95, sheen: 0.3, sheenColor: '#e8ecd8', sheenRoughness: 0.8 }), 0.5);
+    this.add('jpTatami', S({ color: '#cbbf8a', roughness: 0.85 }), 0.5);
+    this.add('jpHeri', S({ color: '#2d3440', roughness: 0.8 }), 0.5);
+    this.add('jpRug', S({ color: '#ddd5c5', roughness: 1 }), 0.5);
+    // lamp surfaces: washi paper shades and LED fittings. Their glow follows the lights
+    // (setLampLevel): plain paper by day, lit at night. They don't block the sun's shadow map.
+    this.add('jpWashi', S({ color: '#f5efe2', roughness: 0.9, emissive: '#ffd09a', emissiveIntensity: 0 }), 0.5, false);
+    this.add('jpLED', S({ color: '#f4f2ee', roughness: 0.4, emissive: '#ffe2c0', emissiveIntensity: 0 }), 0.5, false);
+    // 神台 (altar): red lacquer, gilt, brass, incense, offerings; the red lamps burn day and night
+    this.add('jpLacquer', P({ color: '#7d1512', roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.15 }), 0.5);
+    this.add('jpGold', S({ color: '#d4a84b', roughness: 0.28, metalness: 1 }), 0.6);
+    this.add('jpBrass', S({ color: '#a57f3c', roughness: 0.4, metalness: 1 }), 0.6);
+    this.add('jpIncense', S({ color: '#6e2a1b', roughness: 0.8 }), 0.5);
+    this.add('jpOrange', S({ color: '#e5831c', roughness: 0.55 }), 0.5);
+    this.add('jpAltarRed', S({ color: '#c8231b', roughness: 0.5, emissive: '#ff3a1c', emissiveIntensity: 2.2 }), 0.5, false);
+    const plaqueMat = (c: HTMLCanvasElement) => S({ map: canvasToTexture(c), roughness: 0.35, metalness: 0.1 });
+    this.add('jpAltarPlaque', plaqueMat(altarPlaque()), 0.5);
+    this.add('jpTudiPlaque', plaqueMat(tudiPlaque()), 0.5);
     this.add('aluWhite', S({ color: '#efefec', roughness: 0.35, metalness: 0.1 }), 0.8);
     this.add('aluSilver', S({ color: '#c3c6c7', roughness: 0.3, metalness: 0.85 }), 0.9);
 
@@ -299,10 +334,79 @@ export class MaterialLib {
     this.add('plasticGrey', S({ color: '#b3b7b9', roughness: 0.5 }), 0.8);
     this.add('black', S({ color: '#1c1c1c', roughness: 0.6 }), 0.8);
     this.add('rubber', S({ color: '#2a2a2a', roughness: 0.9 }), 0.6);
+    // Cast from the sun-facing wall surface so wall thickness shields the interior
+    // from shadow-filter bleed at the floor, rather than using the default back face.
+    for (const key of ['wallInt', 'wallExt', 'wallPorch', 'wallWhite', 'wallExtGrey', 'bathWall', 'bathWallDark', 'kitchenTile']) {
+      this.get(key).shadowSide = THREE.FrontSide;
+    }
+  }
+
+  /** 0 = lamps off (day), 1 = lamps on: glow of the paper shades and LED fittings */
+  setLampLevel(k: number) {
+    (this.get('jpWashi') as AnyMat).emissiveIntensity = 3.2 * k;
+    (this.get('jpLED') as AnyMat).emissiveIntensity = 4 * k;
   }
 
   /** register an externally created material (e.g. text plaques) */
   register(key: string, mat: AnyMat, env = 1, cast = true) {
     this.add(key, mat, env, cast);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  神台 plaques (red lacquer, gilt characters)                          */
+/* ------------------------------------------------------------------ */
+
+const CJK = '"KaiTi", "STKaiti", "Kaiti SC", "BiauKai", "Noto Serif SC", "Noto Serif TC", "SimSun", serif';
+
+function lacquerCanvas(w: number, h: number) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#8e1a14');
+  g.addColorStop(1, '#6a100d');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#d9b25a';
+  ctx.lineWidth = w * 0.02;
+  ctx.strokeRect(w * 0.04, w * 0.04, w - w * 0.08, h - w * 0.08);
+  ctx.lineWidth = w * 0.006;
+  ctx.strokeRect(w * 0.07, w * 0.07, w - w * 0.14, h - w * 0.14);
+  ctx.fillStyle = '#e8c46a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  return { c, ctx };
+}
+function vertical(ctx: CanvasRenderingContext2D, text: string, x: number, y0: number, y1: number, size: number) {
+  const chars = [...text];
+  const step = (y1 - y0) / chars.length;
+  ctx.font = `700 ${size}px ${CJK}`;
+  chars.forEach((ch, i) => ctx.fillText(ch, x, y0 + step * (i + 0.5)));
+}
+/** upper altar panel behind the Guanyin statue */
+function altarPlaque() {
+  const w = 420, h = 560;
+  const { c, ctx } = lacquerCanvas(w, h);
+  ctx.font = `700 64px ${CJK}`;
+  ctx.fillText('佛光普照', w / 2, 82);
+  // soft gilt aureole behind the statue
+  const g = ctx.createRadialGradient(w / 2, h * 0.52, 10, w / 2, h * 0.52, w * 0.38);
+  g.addColorStop(0, 'rgba(240, 200, 110, 0.55)');
+  g.addColorStop(1, 'rgba(240, 200, 110, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 120, w, h - 150);
+  ctx.fillStyle = '#e8c46a';
+  vertical(ctx, '南無觀世音菩薩', w * 0.16, 150, h - 50, 38);
+  vertical(ctx, '合家平安', w * 0.84, 170, h - 90, 42);
+  return c;
+}
+/** 地主 (earth god) plaque in the floor niche */
+function tudiPlaque() {
+  const w = 360, h = 320;
+  const { c, ctx } = lacquerCanvas(w, h);
+  vertical(ctx, '五方五土龍神', w * 0.62, 34, h - 30, 38);
+  vertical(ctx, '唐番地主財神', w * 0.38, 34, h - 30, 38);
+  return c;
 }

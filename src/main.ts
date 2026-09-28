@@ -8,6 +8,7 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 import { Kit } from './builder/kit';
 import { MaterialLib } from './builder/materials';
 import { buildWorld } from './builder/context';
+import { INTERIOR_STYLES, interiorLamps, type InteriorStyle } from './builder/interior';
 import { setMaxAnisotropy, canvasToTexture } from './builder/textures';
 import { SkyEnvironment, makeInteriorEnv } from './env';
 import { sunPosition, sunTimes, fromMYT, mytParts, ymdOf, fmtClock, fmtDate, compass } from './solar';
@@ -15,6 +16,7 @@ import { Post } from './post';
 import { WalkControls } from './controls/walk';
 import { MeasureTool, type Units } from './tools/measure';
 import { Annotations } from './tools/annotations';
+import { FengShuiOverlay, houseAdvice, personReading, STARS, KUA_DIR, HOUSE_SITTING, L, getLang, setLang, starName, dirName, dirList, roomName, type Occupant, type Star, type AdviceItem, type Lang } from './tools/fengshui';
 import { PathTraceMode } from './pathtrace';
 import { VIEWS, type ViewPreset } from './views';
 import { Openables } from './doors';
@@ -89,6 +91,9 @@ scene.add(measure.group);
 const annotations = new Annotations();
 annotations.root.visible = false;
 scene.add(annotations.root);
+const fengshui = new FengShuiOverlay();
+fengshui.root.visible = false;
+scene.add(fengshui.root);
 let post: Post;
 const pt = new PathTraceMode(renderer, scene, camera);
 // doors, window sashes and sliding glass panels are separate objects so they can move (front door closed by default)
@@ -111,6 +116,15 @@ function doorAt(ndcPt: THREE.Vector2, maxDist = Infinity) {
 /*  State                                                              */
 /* ------------------------------------------------------------------ */
 let mode: Mode = 'orbit';
+let renovated = false;
+/** interior design package; only available on the renovated house */
+let interior: InteriorStyle = 'none';
+/** interior lights: follow the sun (on from dusk to dawn), or forced on / off */
+type LightsMode = 'auto' | 'on' | 'off';
+let lightsMode: LightsMode = 'auto';
+let lampLights: { light: THREE.PointLight; base: number; always: boolean }[] = [];
+let lampK = -1;
+let fengShuiOn = false;
 let level: Level = 'full';
 let baseEV = 0;
 let autoExposure = true;
@@ -127,7 +141,7 @@ function refreshColliders() {
   colliders = [];
   const visit = (o: THREE.Object3D) => {
     if (!o.visible) return;
-    if (o === measure.group || o === annotations.root) return;
+    if (o === measure.group || o === annotations.root || o === fengshui.root) return;
     if ((o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.boundsTree) colliders.push(o as THREE.Mesh);
     for (const c of o.children) visit(c);
   };
@@ -141,10 +155,113 @@ function setLevel(l: Level) {
   groups.ff && (groups.ff.visible = l !== 'gf');
   groups.slab1 && (groups.slab1.visible = l !== 'gf');
   annotations.groups.ff.visible = l !== 'gf';
+  fengshui.groups.ff.visible = l !== 'gf';
   document.querySelectorAll<HTMLButtonElement>('#levels button').forEach((b) => b.classList.toggle('on', b.dataset.v === l));
   refreshColliders();
   renderer.shadowMap.needsUpdate = true;
   if (pt.active) pt.rebuild();
+}
+
+/** rebuilds the house for the current renovation / interior design state */
+function rebuildWorld() {
+  const enabled = renovated;
+  const kit = new Kit();
+  buildWorld(kit, enabled, interior);
+  const built = kit.build((k) => lib.get(k), (k) => lib.casts(k));
+  for (const g of Object.values(groups)) {
+    g.removeFromParent();
+    g.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.geometry.disposeBoundsTree();
+        o.geometry.dispose();
+      }
+    });
+  }
+  doors.clear();
+  for (const name of ['gf', 'slab1', 'ff', 'ceil2', 'roof', 'site', 'context']) {
+    const g = built.get(name) ?? new THREE.Group();
+    g.name = name;
+    groups[name] = g;
+    scene.add(g);
+  }
+  for (const s of allOpenables()) groups[s.level ?? 'gf'].add(doors.add(s).pivot);
+  // light fittings of the interior design: real (unshadowed) point lights, hidden with their floor
+  lampLights = interiorLamps().map((s) => {
+    const light = new THREE.PointLight(s.color, 0, s.distance, 2);
+    light.position.set(...s.pos);
+    light.castShadow = false;
+    groups[s.level].add(light);
+    return { light, base: s.intensity, always: !!s.always };
+  });
+  applyLamps(true);
+  for (const g of Object.values(groups)) g.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.geometry.computeBoundsTree();
+  });
+  annotations.renovated = enabled;
+  annotations.rebuild();
+  fengshui.renovated = enabled;
+  fengshui.rebuild();
+  renderFengShui();
+  measure.clear();
+  setLevel(level);
+}
+
+function setRenovation(enabled: boolean) {
+  renovated = enabled;
+  // the interior design is laid out for the renovated rooms: it goes with the renovation
+  if (!enabled) interior = 'none';
+  rebuildWorld();
+  updateInteriorUI();
+  const button = $('btn-renovation');
+  button.classList.toggle('on', enabled);
+  button.setAttribute('aria-pressed', String(enabled));
+  button.textContent = enabled ? 'Structure renovation: On' : 'Structure renovation: Off';
+}
+
+function setInterior(style: InteriorStyle) {
+  const next = renovated ? style : 'none';
+  if (next !== interior) {
+    interior = next;
+    rebuildWorld();
+  }
+  updateInteriorUI();
+}
+
+/** 0..1: how far the lamps are switched on (auto: fades in from sunset to dusk) */
+function lampLevel() {
+  if (lightsMode !== 'auto') return lightsMode === 'on' ? 1 : 0;
+  return 1 - THREE.MathUtils.smoothstep(env.elevationDeg, -2, 6);
+}
+function applyLamps(force = false) {
+  const k = lampLevel();
+  if (!force && Math.abs(k - lampK) < 0.004) return;
+  lampK = k;
+  for (const l of lampLights) l.light.intensity = l.base * (l.always ? 1 : k);
+  lib.setLampLevel(k);
+  pt.environmentChanged();
+  pt.materialsChanged();
+}
+function setLightsMode(m: LightsMode) {
+  lightsMode = m;
+  applyLamps(true);
+  updateInteriorUI();
+}
+
+function updateInteriorUI() {
+  const sel = $<HTMLSelectElement>('interior');
+  if (!sel) return;
+  sel.disabled = !renovated;
+  sel.value = interior;
+  const chip = $('chip-interior');
+  chip.classList.toggle('on', interior !== 'none');
+  chip.classList.toggle('disabled', !renovated);
+  chip.title = renovated
+    ? 'Furnish the renovated house with an interior design style'
+    : 'Interior design is available after the structure renovation is applied';
+  const lb = $('btn-lights');
+  lb.hidden = interior === 'none';
+  lb.classList.toggle('on', lightsMode !== 'off');
+  lb.textContent = `💡 Lights: ${lightsMode === 'auto' ? 'Auto' : lightsMode === 'on' ? 'On' : 'Off'}`;
 }
 
 function setMode(m: Mode) {
@@ -327,6 +444,7 @@ function applySunClock(force = false) {
     renderer.shadowMap.needsUpdate = true;
     pt.environmentChanged();
   }
+  applyLamps();
   // --- readouts
   const clock = fmtClock(sunMin);
   $('sun-time').textContent = clock;
@@ -401,13 +519,129 @@ function zoomBy(f: number) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Feng shui (八宅 Eight Mansions)                                     */
+/* ------------------------------------------------------------------ */
+const FS_KEY = 'reno-fengshui-occupants';
+let occupants: Occupant[] = (() => {
+  try {
+    const v = JSON.parse(localStorage.getItem(FS_KEY) ?? '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+})();
+/** '' = the house itself, otherwise the index of an occupant */
+let fsFor = '';
+const esc = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const ICON = { good: '✅', warn: '⚠️', info: 'ℹ️' } as const;
+const adviceHTML = (items: AdviceItem[]) => items.map((a) => `<li><span class="ico">${ICON[a.ok]}</span><span><b>${esc(a.title)}</b><br><span class="txt">${esc(a.text)}</span></span></li>`).join('');
+
+const FS_LANG_KEY = 'reno-fengshui-lang';
+setLang(localStorage.getItem(FS_LANG_KEY) === 'zh' ? 'zh' : 'en');
+/** static texts of the feng shui card ([data-i18n] keys) */
+const FS_TEXT: Record<string, [string, string]> = {
+  title: ['Feng shui · 风水', '风水'],
+  subtitle: ['坎宅 · sits north, faces south · East-group house', '坎宅 · 坐北朝南 · 东四宅'],
+  meta: ['Eight Mansions (八宅) · 3 × 3 Lo Shu grid on each floor', '八宅法 · 每层楼按洛书九宫划分'],
+  gridFor: ['Grid shows stars for', '九宫格显示'],
+  general: ['Whole-house layout', '全屋格局'],
+  rooms: ['Room by room', '逐个房间'],
+  people: ['Occupants (personal Kua 命卦)', '住户（个人命卦）'],
+  peopleHint: [
+    'Add the birth date and gender of each person living here to see their lucky directions and best bedroom. Saved in this browser only.',
+    '输入每位住户的出生日期和性别，即可看到其吉方和最适合的卧室。资料只保存在本浏览器中。',
+  ],
+  male: ['Male', '男'],
+  female: ['Female', '女'],
+  add: ['Add', '添加'],
+  disclaimer: [
+    'A traditional reading for reference, not a professional consultation. The house is taken as facing due south. An exact compass bearing, and the build or move-in year for Flying Stars (玄空飞星), would refine it.',
+    '以上为传统八宅法的参考解读，并非专业堪舆。本分析按房子正朝南计算；若有准确的罗盘度数，以及建成或入住年份（用于玄空飞星），结果会更精确。',
+  ],
+};
+
+function renderFengShui() {
+  const zh = getLang() === 'zh';
+  document.querySelectorAll<HTMLElement>('#fs-card [data-i18n]').forEach((el) => {
+    const t = FS_TEXT[el.dataset.i18n!];
+    if (t) el.textContent = t[zh ? 1 : 0];
+  });
+  $<HTMLInputElement>('fs-name').placeholder = L('Name', '姓名');
+  $('btn-fengshui').title = L('Show the feng shui grid on the floors (F)', '在地板上显示风水九宫格 (F)');
+  $('fs-summary').title = L('Feng shui advice', '风水建议');
+  document.querySelectorAll<HTMLButtonElement>('#fs-lang button').forEach((b) => b.classList.toggle('on', b.dataset.v === getLang()));
+  $('btn-fengshui').textContent = fengShuiOn ? L('Grid on', '九宫格：开') : L('Grid off', '九宫格：关');
+
+  const { general, rooms } = houseAdvice(renovated);
+  $('fs-general').innerHTML = adviceHTML(general);
+  $('fs-rooms').innerHTML = adviceHTML(rooms);
+  // grid selector: the house or one of the occupants
+  const sel = $<HTMLSelectElement>('fs-for');
+  const readings = occupants.map((o) => personReading(o, renovated));
+  const personName = (i: number) => esc(occupants[i].name || L(`Person ${i + 1}`, `住户 ${i + 1}`));
+  if (fsFor && !readings[Number(fsFor)]) fsFor = '';
+  sel.innerHTML = `<option value="">${L('House (坎宅)', '房子（坎宅）')}</option>` +
+    readings.map((r, i) => (r ? `<option value="${i}">${personName(i)} (${L('Kua', '命卦')} ${r.kua})</option>` : '')).join('');
+  sel.value = fsFor;
+  const chosen = fsFor ? readings[Number(fsFor)] : null;
+  const sitting = chosen ? KUA_DIR[chosen.kua] : HOUSE_SITTING;
+  if (fengshui.sitting !== sitting || fengshui.lang !== getLang()) {
+    fengshui.sitting = sitting;
+    fengshui.lang = getLang();
+    fengshui.rebuild();
+  }
+  const swatch: Record<Star, string> = { sheng: '#1e8e3e', tian: '#34a853', yan: '#5bb974', fu: '#81c995', huo: '#f6aea9', liu: '#ee675c', wu: '#d93025', jue: '#a50e0e' };
+  $('fs-legend').innerHTML = (Object.keys(STARS) as Star[]).map((s) => `<span><i style="background:${swatch[s]}"></i>${starName(s)}</span>`).join('') +
+    `<span><i style="background:#f9ab00"></i>${dirName('C')}</span>`;
+  // occupants
+  $('fs-people').innerHTML = readings.map((r, i) => {
+    const o = occupants[i];
+    const head = `<div class="ph"><span>${personName(i)} · ${esc(o.birth)} · ${o.gender === 'm' ? L('male', '男') : L('female', '女')}</span><button class="flat" data-fs-del="${i}">${L('Remove', '删除')}</button></div>`;
+    if (!r) return `<div class="fs-person">${head}${L('Invalid birth date.', '出生日期无效。')}</div>`;
+    const [best] = r.bedrooms;
+    const beds = r.bedrooms.map((b) => `${esc(roomName(b.room))}: ${dirName(b.palace)}${b.star ? ` · ${STARS[b.star].good ? '✅' : '⚠️'} ${starName(b.star)}` : ''}`).join('<br>');
+    const d = (k: number) => dirName(r.good[k]);
+    return `<div class="fs-person">${head}
+      <b>${L('Kua', '命卦')} ${r.kua}</b> · ${r.east
+        ? L('East group, ✅ matches this East-group house', '东四命，✅ 与东四宅相配')
+        : L('West group, ⚠️ the house is East group, so rely on personal directions', '西四命，⚠️ 与东四宅不配，要多用个人吉方')}<br>
+      ${L('Lucky directions', '吉方')}: <b>${dirList(r.good)}</b> (${L('生气 → 伏位', '生气 → 天医 → 延年 → 伏位')})<br>
+      ${L('Avoid', '凶方')}: ${dirList(r.bad)}<br>
+      ${L(
+        `Sleep with the head pointing ${d(1)} (天医) or ${d(3)} (伏位); sit at a desk facing ${d(0)} (生气).`,
+        `睡觉床头朝${d(1)}（天医）或${d(3)}（伏位）；书桌坐着时面向${d(0)}（生气）。`,
+      )}<br>
+      ${L('Best bedroom', '最适合的卧室')}: <b>${esc(roomName(best.room))}</b><br><span class="hint-small">${beds}</span></div>`;
+  }).join('');
+  document.querySelectorAll<HTMLButtonElement>('[data-fs-del]').forEach((b) => (b.onclick = () => {
+    occupants.splice(Number(b.dataset.fsDel), 1);
+    localStorage.setItem(FS_KEY, JSON.stringify(occupants));
+    fsFor = '';
+    renderFengShui();
+  }));
+}
+
+function setFengShui(on: boolean) {
+  fengShuiOn = on;
+  fengshui.root.visible = on && !pt.active;
+  const b = $('btn-fengshui');
+  b.classList.toggle('on', on);
+  b.setAttribute('aria-pressed', String(on));
+  b.textContent = on ? L('Grid on', '九宫格：开') : L('Grid off', '九宫格：关');
+  if (on) {
+    // the grid is painted on the floors: take the roof off so it can be seen from outside
+    if (level === 'full' && mode === 'orbit') setLevel('noroof');
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  UI wiring                                                          */
 /* ------------------------------------------------------------------ */
 function initUI() {
   const ui = $('ui');
   ui.classList.remove('hidden');
   // floating cards (Google-Maps style): house info (☰), sun & time (expandable), view details ("More")
-  const infoCard = $('info-card'), sunCard = $('sun-card'), detailsCard = $('details-card');
+  const infoCard = $('info-card'), sunCard = $('sun-card'), detailsCard = $('details-card'), fsCard = $('fs-card');
   const setInfo = (open: boolean) => {
     infoCard.classList.toggle('open', open);
     $('btn-menu').classList.toggle('on', open);
@@ -415,7 +649,18 @@ function initUI() {
   };
   const setSunCard = (open: boolean) => {
     sunCard.classList.toggle('open', open);
-    if (open) setInfo(false);
+    if (open) {
+      setInfo(false);
+      fsCard.classList.remove('open');
+    }
+  };
+  // feng shui card: expanding shows the advice (and the grid it refers to); the pill turns the grid on / off
+  const setFsCard = (open: boolean) => {
+    fsCard.classList.toggle('open', open);
+    if (open) {
+      sunCard.classList.remove('open');
+      if (!fengShuiOn) setFengShui(true);
+    }
   };
   const setDetails = (open: boolean) => {
     detailsCard.classList.toggle('open', open);
@@ -432,6 +677,46 @@ function initUI() {
     setInfo(false);
     setDetails(false);
   });
+  $('btn-renovation').onclick = () => setRenovation(!renovated);
+  const interiorSel = $<HTMLSelectElement>('interior');
+  interiorSel.innerHTML = '<option value="none">Interior design: Off</option>' +
+    INTERIOR_STYLES.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
+  interiorSel.onchange = () => setInterior(interiorSel.value as InteriorStyle);
+  $('btn-lights').onclick = () => setLightsMode(lightsMode === 'auto' ? 'on' : lightsMode === 'on' ? 'off' : 'auto');
+  updateInteriorUI();
+  $('fs-summary').onclick = () => setFsCard(!fsCard.classList.contains('open'));
+  $('fs-summary').onkeydown = (e) => {
+    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      setFsCard(!fsCard.classList.contains('open'));
+    }
+  };
+  $('btn-fengshui').onclick = (e) => {
+    e.stopPropagation(); // don't expand / collapse the card
+    setFengShui(!fengShuiOn);
+  };
+  document.querySelectorAll<HTMLButtonElement>('#fs-lang button').forEach((b) => (b.onclick = () => {
+    setLang(b.dataset.v as Lang);
+    localStorage.setItem(FS_LANG_KEY, getLang());
+    renderFengShui();
+  }));
+  renderFengShui(); // card in the saved language
+  $<HTMLSelectElement>('fs-for').onchange = (e) => {
+    fsFor = (e.target as HTMLSelectElement).value;
+    renderFengShui();
+  };
+  $('fs-add').onclick = () => {
+    const birth = $<HTMLInputElement>('fs-birth').value;
+    if (!birth) {
+      $<HTMLInputElement>('fs-birth').focus();
+      return;
+    }
+    occupants.push({ name: $<HTMLInputElement>('fs-name').value.trim(), birth, gender: $<HTMLSelectElement>('fs-gender').value as Occupant['gender'] });
+    localStorage.setItem(FS_KEY, JSON.stringify(occupants));
+    $<HTMLInputElement>('fs-name').value = '';
+    $<HTMLInputElement>('fs-birth').value = '';
+    renderFengShui();
+  };
   $('tile-walk').onclick = () => setMode(mode === 'orbit' ? 'walk' : 'orbit');
 
   document.querySelectorAll<HTMLButtonElement>('#mode button').forEach((b) => (b.onclick = () => setMode(b.dataset.v as Mode)));
@@ -562,11 +847,13 @@ function initUI() {
       env.setSkyBase(RASTER_SKY_LIFT);
       measure.group.visible = true;
       annotations.root.visible = dims.checked;
+      fengshui.root.visible = fengShuiOn;
       $('pt-status').textContent = '';
     } else {
       ptBtn.classList.add('active');
       measure.group.visible = false;
       annotations.root.visible = false;
+      fengshui.root.visible = false;
       lib.setEnvScaled(false);
       env.setSkyBase(1); // path tracing: physically based sky light
       await pt.enable();
@@ -597,6 +884,7 @@ function initUI() {
       case 'Digit2': setLevel('noroof'); break;
       case 'Digit3': setLevel('gf'); break;
       case 'KeyP': togglePT(); break;
+      case 'KeyF': setFengShui(!fengShuiOn); break;
       case 'KeyH': ui.classList.toggle('hidden'); break;
       case 'KeyZ': if (e.ctrlKey) measure.undo(); break;
     }
@@ -837,7 +1125,7 @@ async function boot() {
     controls.target.copy(t0);
     controls.update();
     goToView(hero);
-    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__house = { scene, camera, renderer, controls, env, lib, groups, doors, setLevel, setMode, goToView, VIEWS, measure, walk, meter: () => ({ meterRef, meterK, L: meterScene() }) };
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__house = { scene, camera, renderer, controls, env, lib, groups, doors, setLevel, setRenovation, setInterior, setLightsMode, setMode, goToView, VIEWS, measure, walk, meter: () => ({ meterRef, meterK, L: meterScene() }) };
     clock.getDelta();
     loop();
   } catch (err) {

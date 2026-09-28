@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { buildRearExtension, buildMasterExtension, buildAutoGate, buildLKitchen } from './renovation';
 import type { Kit, P2 } from './kit';
 import {
-  W, T_EXT, T_PARTY, T_INT, Z_FRONT, Z_LOT_REAR, Y_FF, Y_GF_CEIL, Y_FF_CEIL, Y_WALL_TOP, RISE, STAIR_TREADS,
+  W, T_EXT, T_PARTY, T_INT, Z_FRONT, Z_LOT_REAR, Y_RENOVATED_GF_CEIL, Z_RENOVATED_BED4_REAR, RENOVATED_REAR_DOOR, Y_FF, Y_GF_CEIL, Y_FF_CEIL, Y_WALL_TOP, RISE, STAIR_TREADS,
   Z_STAIR_N, Z_CORE_S, Z_LIVING_N, X_STAIR_E, X_STAIR_W_STRIP, X_WELL_E, X_KITCHEN_OPEN_W, X_KITCHEN_OPEN_E, X_STAIR_FOOT, X_STAIR_TOP, X_BATH_W, Z_BATH_SPLIT,
   Z_EAVE_FRONT, Z_EAVE_REAR, Z_RIDGE, Y_RIDGE, ROOF_THICK, ROOF_PITCH, ROOF_TAN, roofTop, Z_REAR,
-  Z_BALCONY_FRONT, Z_BALCONY_NOTCH, X_BALCONY_NOTCH, Y_BALCONY,
+  Z_BALCONY_FRONT, Z_BALCONY_NOTCH, Z_MASTER_EXTENSION_FRONT, X_BALCONY_NOTCH, Y_BALCONY,
   X_ROOF_SPLIT, ROOF_DROP, Y_BATH_PARAPET, Y_BATH1_CEIL, stripRoofTop, Z_STRIP_RIDGE, Y_STRIP_RIDGE,
   Y_PORCH, Y_PORCH_GATE, Y_STEP, Z_STEP, X_PILLAR_E, Z_BATH_BOX, Y_PORCH_CEIL, X_PORCH_STRIP, Y_PORCH_STRIP, Y_BATH_BOX,
   X_DOOR_A, X_DOOR_B,
@@ -49,9 +50,12 @@ const Z_FLAT_BACK = Z_BATH_SPLIT + T_CLER / 2; // strip-roof eave line = outer f
 // bathroom-2 wall tiles: light up to 2.1 m, then five 0.3 m dark courses up to the raised ceiling
 const Y_BATH2_HIGH = Y_FF + 2.1 + 5 * 0.3; // 7.2 m, raised ceiling behind the clerestory (under the strip roof)
 // clerestory jalousies: two tile courses high, in the top two dark courses, side by side and touching
+const JAL_WEST = Math.max(X_ROOF_SPLIT + 0.1, X_BATH_W + hi + 0.04);
+const JAL_EAST = 5.9;
+const JAL_MID = (JAL_WEST + JAL_EAST) / 2;
 const BATH2_JAL: Opening[] = [
-  { a: 4.5, b: 5.2, y0: Y_BATH2_HIGH - 0.6, y1: Y_BATH2_HIGH },
-  { a: 5.2, b: 5.9, y0: Y_BATH2_HIGH - 0.6, y1: Y_BATH2_HIGH },
+  { a: JAL_WEST, b: JAL_MID, y0: Y_BATH2_HIGH - 0.6, y1: Y_BATH2_HIGH },
+  { a: JAL_MID, b: JAL_EAST, y0: Y_BATH2_HIGH - 0.6, y1: Y_BATH2_HIGH },
 ];
 
 /* corner window of the front bathroom box: front pane x0..x1 on the front wall, return pane z0..front on the west side */
@@ -98,6 +102,7 @@ function openable(id: string, label: string, level: 'gf' | 'ff'): MovableSink {
 
 export interface UnitOpts {
   main: boolean;
+  renovated?: boolean;
   /** maps logical group → kit group */
   G: (g: 'gf' | 'slab1' | 'ff' | 'ceil2' | 'roof' | 'site') => string;
 }
@@ -109,7 +114,7 @@ export interface UnitOpts {
 /** top of the surrounding ground plane – side walls run down to it so no gap shows below */
 const Y_GROUND = -0.46;
 
-export function partyWall(kit: Kit, x: number, type: 'west' | 'east', G: UnitOpts['G'], houseSide: 1 | -1 = 1) {
+export function partyWall(kit: Kit, x: number, type: 'west' | 'east', G: UnitOpts['G'], houseSide: 1 | -1 = 1, renovated = false) {
   const x0 = x - hp, x1 = x + hp;
   // face towards the house is interior paint, the other side is the exposed side wall
   const sideInt = houseSide > 0
@@ -117,10 +122,11 @@ export function partyWall(kit: Kit, x: number, type: 'west' | 'east', G: UnitOpt
     : { px: 'wallExt', nx: 'wallInt', pz: 'wallExt', nz: 'wallExt', py: 'wallExt', ny: 'wallExt' };
   // rear yard
   kit.group = G('site');
-  kit.box(x0, x1, Y_GROUND, 2.0, Z_LOT_REAR - 0.1, -he, 'wallExt');
+  if (!renovated) kit.box(x0, x1, Y_GROUND, 2.0, Z_LOT_REAR - 0.1, -he, 'wallExt');
   // house GF
   kit.group = G('gf');
-  kit.box(x0, x1, Y_GROUND, Y_FF, -he, Z_FRONT + he, sideInt);
+  // One continuous interior finish through the extension avoids a bright exterior-material strip.
+  kit.box(x0, x1, Y_GROUND, Y_FF, renovated ? Z_LOT_REAR - 0.1 : -he, Z_FRONT + he, sideInt);
   // house FF
   kit.group = G('ff');
   const zF = Z_FRONT + he;
@@ -146,11 +152,11 @@ export function partyWall(kit: Kit, x: number, type: 'west' | 'east', G: UnitOpt
   if (type === 'east') kit.box(x0, x1, 3.0, Y_PORCH_CEIL, zPil, Z_BALCONY_FRONT, 'wallWhite');
   // side boundary wall from the pillar to the street, and the boundary pier at the street
   kit.box(x0, x1, Y_GROUND, 1.5, zPil, 18.35, 'wallWhite');
-  kit.box(x - 0.22, x + 0.22, Y_GROUND, 1.5, 18.35, 18.75, 'wallWhite');
+  kit.box(x - 0.22, x + 0.22, Y_GROUND, renovated ? 1.95 : 1.5, 18.35, 18.75, 'wallWhite');
   // balcony level
   kit.group = G('ff');
   if (type === 'west') {
-    kit.box(x0, x1, 3.35, 6.1, Z_FRONT + he, Z_BALCONY_NOTCH, 'wallExt');
+    kit.box(x0, x1, 3.35, renovated ? Y_FF_CEIL : 6.1, Z_FRONT + he, renovated ? Z_MASTER_EXTENSION_FRONT + he : Z_BALCONY_NOTCH, 'wallExt');
   } else {
     kit.box(x0, x1, 3.35, Y_BATH_PARAPET, Z_FRONT + he, 12.29, houseSide > 0 ? { px: 'wallInt', rest: 'wallExt' } : { nx: 'wallInt', rest: 'wallExt' });
     // privacy wall beside the balcony (≈ 1.7 m above the balcony floor)
@@ -193,6 +199,10 @@ export function partyWall(kit: Kit, x: number, type: 'west' | 'east', G: UnitOpt
 
 export function buildUnit(kit: Kit, o: UnitOpts) {
   const { main, G } = o;
+  const renovated = main && !!o.renovated;
+  const rearZ = renovated ? Z_LOT_REAR : 0;
+  const rearDoorA = renovated ? RENOVATED_REAR_DOOR.a : REAR_DOOR_A;
+  const rearDoorB = renovated ? RENOVATED_REAR_DOOR.b : REAR_DOOR_B;
   if (main) movSpecs.length = 0;
   const mv = (id: string, label: string, level: 'gf' | 'ff') => (main ? openable(id, label, level) : undefined);
 
@@ -204,7 +214,10 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
     { a: REAR_DOOR_A, b: REAR_DOOR_B, y0: 0, y1: 2.55 },
     { a: KITCHEN_WINDOW_A, b: KITCHEN_WINDOW_B, y0: 1.1, y1: 2.55 },
   ];
-  wall(kit, 'x', 0, hp, W - hp, -0.15, Y_FF, T_EXT, 'wallInt', 'wallExt', gfRearOpen, 'wallInt');
+  if (renovated) {
+    kit.box(1.51, W - hp, Y_GF_CEIL - 0.3, Y_FF, -he, he, 'wallInt');
+    buildRearExtension(kit, G, mv, movSpecs);
+  } else wall(kit, 'x', 0, hp, W - hp, -0.15, Y_FF, T_EXT, 'wallInt', 'wallExt', gfRearOpen, 'wallInt');
   const gfFrontOpen: Opening[] = [
     { a: X_DOOR_A, b: X_DOOR_B, y0: 0, y1: 2.4 },
     { a: 3.1, b: 5.3, y0: 0, y1: 2.4 },
@@ -212,27 +225,27 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
   wall(kit, 'x', Z_FRONT, hp, W - hp, -0.15, Y_FF, T_EXT, 'wallPorch', 'wallInt', gfFrontOpen, 'wallInt');
   // tiled thresholds = the second entrance step (riser tiled down to the first step)
   for (const o of gfFrontOpen) kit.box(o.a, o.b, Y_STEP, 0.004, Z_FRONT - he, Z_FRONT + he + 0.012, 'floorTile');
-  kit.box(REAR_DOOR_A, REAR_DOOR_B, -0.02, 0.004, -he, he, 'floorTile');
+  kit.box(rearDoorA, rearDoorB, -0.02, 0.004, rearZ - he, rearZ + he, 'floorTile');
   // first entrance step: full width, from the west wall to the pillar at the east end of the façade
   kit.box(hp, X_PILLAR_E, -0.45, Y_STEP, Z_FRONT + he, Z_STEP, 'concreteLight');
   kit.box(X_PILLAR_E, W - hp, -0.45, Y_PORCH_CEIL, Z_FRONT + he, Z_BATH_BOX, 'wallPorch', 'nz');
   // exterior sills at rear
-  for (const w of [gfRearOpen[0], gfRearOpen[1], gfRearOpen[3]]) {
+  for (const w of (renovated ? [] : [gfRearOpen[0], gfRearOpen[1], gfRearOpen[3]])) {
     lbox(kit, 'x', 0, w.a - 0.04, w.b + 0.04, w.y0 - 0.05, w.y0, -he - 0.045, -he, 'wallExt');
   }
 
   // windows / doors in exterior walls
-  casement(kit, 'x', 0, 0.25, 1.3, 0.9, 2.1, { panes: 2, nOff: -0.03, movable: mv('win-bed4', 'Bedroom 4 window', 'gf') });
-  casement(kit, 'x', 0, BATH3_WIN.a, BATH3_WIN.b, BATH3_WIN.y0, BATH3_WIN.y1, { panes: 2, nOff: -0.03, glass: 'glassFrosted', hung: 'top', movable: mv('win-bath3', 'Bathroom 3 window', 'gf') });
-  casement(kit, 'x', 0, KITCHEN_WINDOW_A, KITCHEN_WINDOW_B, 1.1, 2.55, { panes: 1, nOff: -0.03, flip: true, movable: mv('win-kitchen', 'Kitchen window', 'gf') });
+  if (!renovated) casement(kit, 'x', 0, 0.25, 1.3, 0.9, 2.1, { panes: 2, nOff: -0.03, movable: mv('win-bed4', 'Bedroom 4 window', 'gf') });
+  if (!renovated) casement(kit, 'x', 0, BATH3_WIN.a, BATH3_WIN.b, BATH3_WIN.y0, BATH3_WIN.y1, { panes: 2, nOff: -0.03, glass: 'glassFrosted', hung: 'top', movable: mv('win-bath3', 'Bathroom 3 window', 'gf') });
+  if (!renovated) casement(kit, 'x', rearZ, KITCHEN_WINDOW_A, KITCHEN_WINDOW_B, 1.1, 2.55, { panes: 1, nOff: -0.03, flip: true, movable: mv('win-kitchen', 'Kitchen window', 'gf') });
   slidingDoor(kit, 'x', Z_FRONT, 3.1, 5.3, 0, 2.4, { panels: 3, nOff: 0.04, movable: mv('slide-living', 'Living room sliding door', 'gf'), group: 'slide-living' });
   // main door frame (unequal double leaf). The leaves are separate, swinging objects: see mainDoorLeaves()
   doorFrame(kit, 'x', Z_FRONT, T_EXT, X_DOOR_A, X_DOOR_B, 0, 2.4);
   // rear kitchen door with fanlight (opens out to yard)
   const rearOpt: HingedOpts = { hingeAtB: true, openTo: -1, angle: deg(100), mat: 'doorRear', knob: 'lever', transom: 2.55, frameW: FW };
-  if (main) swingDoor(kit, 'rear', 'Kitchen back door', 'gf', 'x', 0, T_EXT, REAR_DOOR_A, REAR_DOOR_B, 0, 2.1, rearOpt);
-  else hingedDoor(kit, 'x', 0, T_EXT, REAR_DOOR_A, REAR_DOOR_B, 0, 2.1, { ...rearOpt, angle: 0 });
-  lbox(kit, 'x', 0, REAR_DOOR_A + FW, REAR_DOOR_B - FW, 2.1 + FW, 2.55 - FW, -0.004, 0.004, 'glass');
+  if (main) swingDoor(kit, 'rear', 'Kitchen back door', 'gf', 'x', rearZ, T_EXT, rearDoorA, rearDoorB, 0, 2.1, rearOpt);
+  else hingedDoor(kit, 'x', 0, T_EXT, rearDoorA, rearDoorB, 0, 2.1, { ...rearOpt, angle: 0 });
+  lbox(kit, 'x', rearZ, rearDoorA + FW, rearDoorB - FW, 2.1 + FW, 2.55 - FW, -0.004, 0.004, 'glass');
 
   // porch façade details: meter box + surface conduit. The conduit runs below the notch-line beam
   // (underside Y_PORCH_STRIP) on the west, then wraps across the east pillar (west face → front face)
@@ -249,12 +262,21 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
   kit.box(X_PILLAR_E - 0.04, X_PILLAR_E, yC - 0.03, yC + 0.03, (zC + zP) / 2 - 0.015, (zC + zP) / 2 + 0.015, 'black');
   kit.box((X_PILLAR_E + W) / 2 - 0.015, (X_PILLAR_E + W) / 2 + 0.015, yC - 0.03, yC + 0.03, Z_BATH_BOX, Z_BATH_BOX + 0.04, 'black');
 
-  if (main) buildGroundInterior(kit);
+  if (main) buildGroundInterior(kit, renovated);
 
   /* ---------------- First floor slab & balcony slab ---------------- */
   kit.group = G('slab1');
   const slab = (x0: number, x1: number, z0: number, z1: number, top: string, bottom = 'ceiling', y0 = Y_GF_CEIL, y1 = Y_FF) =>
     kit.box(x0, x1, y0, y1, z0, z1, { py: top, ny: bottom, rest: 'ceiling' });
+  if (renovated) {
+    // Flat plaster ceiling across the ground floor, hiding the beams and old dropped sections. Solid
+    // down to the slab so its edge beside the open stair hall reads as a plastered bulkhead.
+    // Kept with the slab so the ground-floor plan / cutaway views stay open from above.
+    const pc = (x0: number, x1: number, z0: number, z1: number) => kit.box(x0, x1, Y_RENOVATED_GF_CEIL, Y_GF_CEIL, z0, z1, 'ceiling');
+    pc(hp, W - hp, Z_LOT_REAR + he, Z_STAIR_N + hi); // extension, bathroom, bedroom 4, kitchen
+    pc(X_STAIR_E - T_INT, W - hp, Z_STAIR_N + hi, Z_LIVING_N - hi); // dining (stair hall stays open)
+    pc(hp, W - hp, Z_LIVING_N - hi, Z_FRONT - he); // living room
+  }
   if (main) {
     slab(hp, W - hp, he, Z_STAIR_N + hi, 'floorTile');
     slab(X_WELL_E, W - hp, Z_STAIR_N + hi, Z_CORE_S + hi, 'floorTile');
@@ -265,7 +287,10 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
   }
   slab(X_BATH_W - hi, W - hp, Z_FRONT + he, 12.29, 'bathFloor', 'soffit', 3.35, Y_FF);
   const bal = (x0: number, x1: number, z0: number, z1: number) => kit.box(x0, x1, 3.35, Y_BALCONY, z0, z1, { py: 'balconyTile', ny: 'soffit', rest: 'wallExt' });
-  bal(hp, X_BATH_W - hi, Z_FRONT + he, Z_BALCONY_NOTCH);
+  if (renovated) {
+    bal(hp, X_BALCONY_NOTCH, Z_FRONT + he, Z_MASTER_EXTENSION_FRONT + he);
+    bal(X_BALCONY_NOTCH, X_BATH_W - hi, Z_FRONT + he, Z_BALCONY_NOTCH);
+  } else bal(hp, X_BATH_W - hi, Z_FRONT + he, Z_BALCONY_NOTCH);
   bal(X_BALCONY_NOTCH, X_BATH_W - hi, Z_BALCONY_NOTCH, Z_BALCONY_FRONT);
   bal(X_BATH_W - hi, W - hp, 12.29, Z_BALCONY_FRONT);
   // porch ceiling (photos 101108 / 102754): flat soffit – the front edge beam (full width east of the
@@ -288,6 +313,8 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
     casement(kit, 'x', 0, w.a, w.b, w.y0, w.y1, { panes: 2, nOff: -0.03, movable: mv(`win-ff-rear${i}`, i === 0 ? 'Bedroom 3 window' : 'Bedroom 2 window', 'ff') });
     lbox(kit, 'x', 0, w.a - 0.04, w.b + 0.04, w.y0 - 0.05, w.y0, -he - 0.045, -he, 'wallExt');
   });
+  if (renovated) buildMasterExtension(kit, G, mv);
+  else {
   // master bedroom front (grey feature wall)
   const mWin: Opening = { a: 0.45, b: 0.95, y0: Y_FF + 1.25, y1: Y_FF + 2.3 };
   const mSlide: Opening = { a: 1.4, b: 3.2, y0: Y_FF, y1: Y_FF + 2.3 }; // shifted 0.3 m west (right, seen from inside)
@@ -296,6 +323,7 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
   slidingDoor(kit, 'x', Z_FRONT, mSlide.a, mSlide.b, mSlide.y0, mSlide.y1, { panels: 2, nOff: 0.03, movable: mv('slide-master', 'Master bedroom sliding door', 'ff') });
   surround(kit, 'x', Z_FRONT, he, 1, mWin.a, mWin.b, mWin.y0, mWin.y1, { w: 0.07 });
   surround(kit, 'x', Z_FRONT, he, 1, mSlide.a, mSlide.b, mSlide.y0 + 0.07, mSlide.y1, { w: 0.07 });
+  }
   // bath projection (white box): a corner window wrapping its west corner (photos 101103 / 101057) + one small window
   const bw1: Opening = { a: BW_CORNER.x0, b: BW_CORNER.x1, y0: BW_CORNER.y0, y1: BW_CORNER.y1 };
   const bw2: Opening = { a: 5.15, b: 5.7, y0: Y_FF + 1.85, y1: Y_FF + 2.35 };
@@ -346,13 +374,20 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
     for (const cx of [a + 0.2, b - 0.2]) kit.box(cx - 0.03, cx + 0.03, Y_BALCONY + 0.15, Y_BALCONY + 0.23, zf - 0.11, zf - 0.07, 'chrome');
   }
   kit.box(X_SOLID, W - hp, Y_BALCONY, Y_BALCONY + 1.1, zf - 0.18, zf, 'wallExt');
-  // notch: glass return along its side; its back is a solid white wall that drops past the balcony
-  // slab down to the porch soffit strip (nothing in front of it)
-  kit.box(xn, xn + PW, Y_BALCONY, yP, zn - 0.2, zn, 'wallExt');
-  kit.box(xn, xn + 0.15, Y_BALCONY, Y_BALCONY + 0.15, zn, zf - 0.2, 'wallExt');
-  kit.box(xn + 0.069, xn + 0.081, yG0, yG1, zn + 0.01, zf - 0.21, 'glassRail');
-  for (const cz of [zn + 0.22, zf - 0.42]) kit.box(xn + 0.045, xn + 0.105, Y_BALCONY + 0.15, Y_BALCONY + 0.23, cz - 0.03, cz + 0.03, 'chrome');
-  kit.box(hp, xn, Y_PORCH_STRIP, Y_BALCONY + 1.1, zn - 0.15, zn, 'wallExt');
+  // Renovated side railing meets the bedroom facade without the old return pier.
+  const returnStart = renovated ? Z_MASTER_EXTENSION_FRONT + he : zn;
+  if (!renovated) {
+    kit.box(xn, xn + PW, Y_BALCONY, yP, zn - 0.2, zn, 'wallExt');
+    kit.box(hp, xn, Y_PORCH_STRIP, Y_BALCONY + 1.1, zn - 0.15, zn, 'wallExt');
+  }
+  kit.box(xn, xn + 0.15, Y_BALCONY, Y_BALCONY + 0.15, returnStart, zf - 0.2, 'wallExt');
+  kit.box(xn + 0.069, xn + 0.081, yG0, yG1, returnStart + 0.01, zf - 0.21, 'glassRail');
+  for (const cz of [returnStart + 0.22, zf - 0.42]) kit.box(xn + 0.045, xn + 0.105, Y_BALCONY + 0.15, Y_BALCONY + 0.23, cz - 0.03, cz + 0.03, 'chrome');
+  if (renovated) {
+    for (const y of [yG0 + 0.12, yG1 - 0.12]) {
+      kit.box(xn + 0.045, xn + 0.105, y - 0.025, y + 0.025, returnStart, returnStart + 0.045, 'chrome');
+    }
+  }
   floorTrap(kit, 5.6, Y_BALCONY, 16.1);
 
   if (main) buildFirstInterior(kit, G);
@@ -379,6 +414,8 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
   kit.prismZY([
     [Z_FRONT + he, -0.45], [18.75, -0.45], [18.75, Y_PORCH_GATE], [Z_STEP, Y_PORCH], [Z_FRONT + he, Y_PORCH],
   ], hp, W - hp, 'concreteLight', (_nz, ny) => (ny > 0.5 ? 'concretePorch' : 'concreteLight'));
+  if (renovated) buildAutoGate(kit, movSpecs);
+  else {
   // front boundary (measured off photos 101057 / 101103): side pier (party wall) – low wall –
   // gate pillar – double swing gate – gate pillar – low wall – side pier
   const GX0 = 1.04, GX1 = 4.29, GM = (GX0 + GX1) / 2, ZG = 18.6;
@@ -415,6 +452,7 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
     kit.box(pc - 0.13, pc + 0.13, 0.94, 1.07, 18.78, 18.792, 'chrome');
     kit.box(pc - 0.1, pc + 0.1, 1.0, 1.015, 18.792, 18.794, 'black');
     kit.box(4.44, 4.52, 1.04, 1.11, 18.78, 18.79, 'plasticWhite');
+  }
   }
 }
 
@@ -476,22 +514,38 @@ function gangSwitch(kit: Kit, x: number, y: number, zf: number, normal: 'px' | '
   }
 }
 
-function buildGroundInterior(kit: Kit) {
+function buildGroundInterior(kit: Kit, renovated = false) {
   const H = Y_GF_CEIL;
   const WI = 'wallInt';
   const bathEast = 3.88; // shorten the partition beside the rear kitchen door by 10 cm
   // floors
   const floor = (x0: number, x1: number, z0: number, z1: number, mat: string, top = 0) => kit.box(x0, x1, -0.3, top, z0, z1, { py: mat, rest: 'concreteLight' });
-  floor(1.51 + hi, bathEast - hi, he, 1.53 - hi, 'bathFloor', -0.015);
-  floor(hp, 1.51 + hi, he, 1.53 - hi, 'floorTile');
-  floor(bathEast - hi, W - hp, he, 1.53 - hi, 'floorTile');
-  floor(hp, W - hp, 1.53 - hi, Z_FRONT - he, 'floorTile');
+  if (renovated) {
+    // Continuous tile surface across the former bathroom and rear-wall boundaries.
+    floor(hp, W - hp, Z_LOT_REAR + he, Z_FRONT - he, 'floorTile');
+  } else {
+    floor(1.51 + hi, bathEast - hi, he, 1.53 - hi, 'bathFloor', -0.015);
+    floor(hp, 1.51 + hi, he, 1.53 - hi, 'floorTile');
+    floor(bathEast - hi, W - hp, he, 1.53 - hi, 'floorTile');
+    floor(hp, W - hp, 1.53 - hi, Z_FRONT - he, 'floorTile');
+  }
 
   // internal walls
+  const bedroomSideWindow: Opening = { a: 0.3, b: 2.5, y0: 1.0, y1: 2.2 };
+  if (renovated) {
+    // Close the old window wall; the larger slider faces the kitchen on the east side.
+    wall(kit, 'x', Z_RENOVATED_BED4_REAR, 1.96, 3.1 + hi, 0, H, T_INT, WI, WI);
+    slidingDoor(kit, 'z', 3.1, bedroomSideWindow.a, bedroomSideWindow.b, bedroomSideWindow.y0, bedroomSideWindow.y1,
+      { panels: 2, glass: 'glass', nOff: 0.03, movable: openable('win-bed4', 'Bedroom 4 sliding window', 'gf'), group: 'win-bed4' });
+    lbox(kit, 'z', 3.1, bedroomSideWindow.a - 0.04, bedroomSideWindow.b + 0.04,
+      bedroomSideWindow.y0 - 0.05, bedroomSideWindow.y0, hi, hi + 0.045, 'wallInt');
+  } else {
   wall(kit, 'z', 1.51, he, 1.53 + hi, 0, H, T_INT, WI, WI);
   wall(kit, 'x', 1.53, 1.51 - hi, bathEast + hi, 0, H, T_INT, WI, WI);
   wall(kit, 'z', bathEast, he, 1.53 - hi, 0, H, T_INT, WI, WI, [{ a: DR.bath3[0], b: DR.bath3[1], y0: 0, y1: 2.1 }]);
-  wall(kit, 'z', 3.1, 1.53 + hi, Z_STAIR_N - hi, 0, H, T_INT, WI, WI, [{ a: DR.bed4[0], b: DR.bed4[1], y0: 0, y1: 2.1 }]);
+  }
+  wall(kit, 'z', 3.1, renovated ? Z_RENOVATED_BED4_REAR + hi : 1.53 + hi, Z_STAIR_N - hi, 0, H, T_INT, WI, WI,
+    [...(renovated ? [bedroomSideWindow] : []), { a: DR.bed4[0], b: DR.bed4[1], y0: 0, y1: 2.1 }]);
   // stair back wall runs on past the foot of flight 1 as a short pier, then the kitchen opening (photos 101153 / 101157)
   wall(kit, 'x', Z_STAIR_N, hp, X_KITCHEN_OPEN_W, 0, H, T_INT, WI, WI);
   wall(kit, 'x', Z_STAIR_N, X_KITCHEN_OPEN_E, W - hp, 0, H, T_INT, WI, WI);
@@ -509,6 +563,7 @@ function buildGroundInterior(kit: Kit) {
   kit.box(X_KITCHEN_OPEN_W, X_KITCHEN_OPEN_E, H - 0.3, H, Z_STAIR_N - hi, Z_STAIR_N + hi, WI);
   kit.box(X_STAIR_E - T_INT, X_STAIR_E, H - 0.3, H, Z_STAIR_N + hi, Z_LIVING_N + hi, WI);
 
+  if (!renovated) {
   // bathroom 3 tiles
   const bx0 = 1.51 + hi, bx1 = bathEast - hi, bz0 = he, bz1 = 1.53 - hi;
   const bathSkins = (y0: number, y1: number, mat: string) => {
@@ -522,11 +577,14 @@ function buildGroundInterior(kit: Kit) {
   const bathCeil = 2.1 + 2 * 0.3;
   bathSkins(2.1, bathCeil, 'bathWallDark');
   kit.box(bx0, bx1, bathCeil, H, bz0, bz1, 'ceiling');
+  }
   // bedroom 4 dropped ceiling at 3.0 m
   const bed4Ceil = 3.0;
-  kit.box(hp, 3.1 - hi, bed4Ceil, H, 1.53 + hi, Z_STAIR_N - hi, 'ceiling');
+  if (!renovated) kit.box(hp, 3.1 - hi, bed4Ceil, H, 1.53 + hi, Z_STAIR_N - hi, 'ceiling');
   // ...including the window alcove beside the bathroom, up to the rear wall
-  kit.box(hp, 1.51 - hi, bed4Ceil, H, he, 1.53 + hi, 'ceiling');
+  if (!renovated) kit.box(hp, 1.51 - hi, bed4Ceil, H, he, 1.53 + hi, 'ceiling');
+  if (!renovated) {
+  const bz0 = he, bx0 = 1.51 + hi;
   // WC 0.1 m clear of the basin rim (basin half-width ≈ 0.25 m, cistern half-width 0.2 m)
   const basinX = 3.45;
   toilet(kit, basinX - 0.25 - 0.1 - 0.2, -0.015, bz0 + 0.008, 0);
@@ -535,6 +593,9 @@ function buildGroundInterior(kit: Kit) {
   shower(kit, bx0 + BATH3_WIN_GAP / 2, -0.015, bz0 + 0.008, 0);
   floorTrap(kit, 1.95, -0.015, 0.85);
 
+  }
+  if (renovated) buildLKitchen(kit);
+  else {
   // Kitchen: rear backsplash and a metal sink, clear of the untiled side wall.
   const backsplashStart = KITCHEN_TILE_START; // two full 600 mm tiles across
   const previousUV = kit.uvFn;
@@ -560,9 +621,10 @@ function buildGroundInterior(kit: Kit) {
   kit.rod(V(tapX, top + 0.28, 0.14), V(tapX, top + 0.28, 0.36), 0.011, 'chrome');
   kit.rod(V(tapX, top + 0.28, 0.36), V(tapX, top + 0.22, 0.36), 0.011, 'chrome');
   kit.box(tapX - 0.03, tapX + 0.03, top + 0.06, top + 0.075, 0.1, 0.2, 'chrome');
+  }
 
   // doors (open like in the photos)
-  swingDoor(kit, 'bath3', 'Bathroom 3 door', 'gf', 'z', bathEast, T_INT, ...DR.bath3, 0, 2.1, { hingeAtB: true, openTo: -1, angle: deg(80), mat: 'doorBath', frameW: FW });
+  if (!renovated) swingDoor(kit, 'bath3', 'Bathroom 3 door', 'gf', 'z', bathEast, T_INT, ...DR.bath3, 0, 2.1, { hingeAtB: true, openTo: -1, angle: deg(80), mat: 'doorBath', frameW: FW });
   swingDoor(kit, 'bed4', 'Bedroom 4 door', 'gf', 'z', 3.1, T_INT, ...DR.bed4, 0, 2.1, { hingeAtB: true, openTo: -1, angle: deg(78), mat: 'doorWood', frameW: FW });
 
   // electrical
@@ -604,8 +666,8 @@ function buildGroundInterior(kit: Kit) {
   wallOutlet(kit, W - hp - 0.45, 0.3, Z_STAIR_N + hi, 'pz');
   // Right of the bathroom-3 door (seen from outside): two switches, each one large rocker;
   // the one nearer the rear wall has a red indicator.
-  bigSwitch(kit, bathEast + hi, 1.35, 0.446, 'px');
-  bigSwitch(kit, bathEast + hi, 1.35, 0.354, 'px', true);
+  if (!renovated) bigSwitch(kit, bathEast + hi, 1.35, 0.446, 'px');
+  if (!renovated) bigSwitch(kit, bathEast + hi, 1.35, 0.354, 'px', true);
   // Bedroom 4, beside the door: two large-rocker switches, aircon socket high up, low UK socket
   bigSwitch(kit, 3.1 - hi, 1.35, 3.204, 'nx');
   bigSwitch(kit, 3.1 - hi, 1.35, 3.296, 'nx');

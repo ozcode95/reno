@@ -47,10 +47,14 @@ kbd { background: #f1f3f4; border: 1px solid var(--line); border-bottom-width: 2
 #btn-menu.on { background: var(--blue-soft); color: #174ea6; }
 .select-chip { cursor: pointer; padding-right: 4px; }
 .select-chip select { border: none; background: transparent; font: inherit; color: inherit; padding: 0 4px; outline: none; cursor: pointer; max-width: 190px; }
+.select-chip.disabled { opacity: 0.55; cursor: not-allowed; }
+.select-chip select:disabled { cursor: not-allowed; }
+#chip-interior select { max-width: 240px; }
+.chip[hidden] { display: none; }
 
 /* ---------- top-right: sun & time card ---------- */
-#topright { position: fixed; top: 12px; right: 12px; width: 348px; max-width: calc(100vw - 24px); z-index: 12; max-height: calc(100vh - 290px); display: flex; flex-direction: column; }
-#topright #sun-card { max-height: 100%; overflow-y: auto; }
+#topright { position: fixed; top: 12px; right: 12px; width: 348px; max-width: calc(100vw - 24px); z-index: 12; max-height: calc(100vh - 290px); display: flex; flex-direction: column; gap: 10px; }
+#topright #sun-card { max-height: 100%; overflow-y: auto; flex: 0 1 auto; }
 
 /* ---------- generic pop-up / expandable cards ---------- */
 .popcard { display: none; flex-direction: column; overflow: hidden; font-size: 13.5px; }
@@ -65,6 +69,31 @@ kbd { background: #f1f3f4; border: 1px solid var(--line); border-bottom-width: 2
 .card-body { padding: 8px 18px 14px; overflow-y: auto; min-height: 0; }
 .card-body h4 { margin: 10px 0 8px; font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
 #info-card { min-height: 0; }
+
+/* feng shui card */
+/* feng shui card (below the sun card): summary row + short scrolling panel */
+#fs-card { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#fs-summary { cursor: pointer; flex: none; }
+#fs-summary .pill { flex: none; }
+#btn-fengshui.on { color: #174ea6; border-color: #aecbfa; background: var(--blue-soft); }
+#fs-card.open .chev { transform: rotate(180deg); }
+#fs-card .expand { display: none; max-height: min(320px, 42vh); overflow-y: auto; padding: 4px 14px 12px 16px; border-top: 1px solid #e8eaed; font-size: 13px; }
+#fs-card.open .expand { display: block; }
+.fs-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 2px; }
+.fs-lang { flex: none; }
+.fs-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--muted); margin: 2px 0 6px; }
+.fs-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.fs-list { list-style: none; margin: 0; padding: 0; }
+.fs-list li { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #e8eaed; line-height: 1.45; }
+.fs-list li:last-child { border-bottom: none; }
+.fs-list .ico { flex: none; width: 18px; text-align: center; }
+.fs-list b { font-weight: 500; }
+.fs-list .txt { color: #3c4043; font-size: 12.5px; }
+.fs-person { background: #f8f9fa; border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 12.5px; line-height: 1.5; }
+.fs-person .ph { display: flex; justify-content: space-between; align-items: center; font-weight: 500; font-size: 13.5px; }
+.fs-add { display: flex; gap: 6px; align-items: center; margin: 8px 0; }
+.fs-add input[type='text'] { flex: 1; min-width: 0; font: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
+.fs-add input[type='date'] { width: 136px; }
 
 /* sun card: collapsed summary row + expandable body */
 #sun-card { overflow: hidden; flex: none; }

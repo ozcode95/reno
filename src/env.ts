@@ -77,9 +77,11 @@ export class SkyEnvironment {
     const cam = s.camera as THREE.OrthographicCamera;
     cam.left = -19; cam.right = 19; cam.top = 19; cam.bottom = -19;
     cam.near = 1; cam.far = 140;
-    s.bias = -0.00015;
-    s.normalBias = 0.025;
-    s.radius = 2.5;
+    // Small offsets keep contact shadows attached at interior wall/floor joins.
+    // The previous depth bias shifted shadows by ~21 mm over this camera range.
+    s.bias = -0.00002;
+    s.normalBias = 0.002;
+    s.radius = 1;
     this.target.position.copy(this.center);
     scene.add(this.sun, this.target);
     this.sun.target = this.target;

@@ -27,6 +27,9 @@ For the best look, use a desktop browser with a dedicated GPU (Chrome or Edge).
 | **Measure tool** (`M`) | Click two points to measure. Points snap to corners (orange) and edges (blue); hold `Shift` to lock the measurement to an axis. `Ctrl+Z` undoes. Units can be metres, feet, or both. |
 | **Photoreal** (`P`) | GPU path tracing with true global illumination and reflections. Keep the camera still and it refines over time. |
 | **Front door** (`O`) | Click the door (in walk mode aim the crosshair and click) or press `O` / the panel button to swing it open or shut. Both leaves open separately; the door starts closed and blocks walking while shut. |
+| **Feng shui** (`F`) | The card below the sun clock (top right). Click it to expand the advice; its *Grid* pill (or `F`) turns the floor grid on and off. An Eight Mansions (八宅) reading of the layout. The house sits north and faces south (坎宅). Each floor gets a colour-coded 3 × 3 Lo Shu grid with its stars, and a card lists whole-house and room-by-room advice. Add occupants' birth dates and genders to get each person's Kua (命卦), lucky directions and best bedroom, and to show the grid for that person. The **EN / 中文** switch on the card changes the advice, the floor labels and the chip between English and Chinese. The occupants and the language are saved in the browser only. |
+| **Interior design** | The 🛋️ dropdown next to *Structure renovation*. It is disabled until the renovation is applied, because the furniture is laid out for the renovated rooms; turning the renovation off also removes it. Style: **日式简约风 (Japanese minimalist)**: pale oak platform beds, wardrobes and desks, a low linen sofa, a 神台 altar (Guanyin, red 神台灯, incense burner, offerings, 地主 shrine in the base niche) straight ahead of the front door (*Go to → Front door → 神台*), a genkan shoe cabinet, the dining table at the back beside the L-kitchen, a tatami nook in the master bedroom, and appliances (TV, soundbar, router, split air-conditioners, ceiling fan, French-door fridge, microwave, rice cooker, kettle, washing machine, water heaters, air purifier). |
+| **Lights** (`💡`) | Shown with an interior design. Washi pendants, ceiling lights, andon, bedside and LED fittings are real lights. *Auto* follows the sun clock: they fade in from sunset (sun below ≈ 6°) and are fully on after dusk; click to cycle *On* / *Off*. The red altar lamps stay lit day and night. |
 | **Screenshot** | Saves a PNG of the current view. |
 | `H` | Hide or show the panel. |
 
@@ -83,6 +86,8 @@ src/tools/annotations.ts room labels and dimension lines
 src/pathtrace.ts         photoreal mode (three-gpu-pathtracer)
 src/views.ts             camera presets
 src/doors.ts             swinging front-door leaves (open/close)
+src/builder/interior.ts  interior design styles (furniture for the renovated layout)
+src/tools/fengshui.ts    feng shui (Eight Mansions) grid overlay, advice and personal Kua
 ```
 
 To change a dimension, edit `src/config.ts`. Everything, including the dimension labels, is derived from it.

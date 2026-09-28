@@ -21,6 +21,7 @@ export const VIEWS: ViewPreset[] = [
   { id: 'yard', label: 'Rear yard', group: 'Exterior', pos: [5.6, 1.55, -2.35], target: [1.5, 1.8, 0.2] },
 
   { id: 'living', label: 'Living room', group: 'Ground floor', pos: [5.6, 1.6, 11.3], target: [1.6, 1.3, 7.8] },
+  { id: 'entrance', label: 'Front door → 神台 (altar)', group: 'Ground floor', pos: [1.65, 1.6, 11.3], target: [1.65, 1.35, 7.7] },
   { id: 'living-front', label: 'Living → front doors', group: 'Ground floor', pos: [3.9, 1.6, 7.0], target: [3.4, 1.3, 11.7] },
   { id: 'dining', label: 'Dining & kitchen', group: 'Ground floor', pos: [4.9, 1.6, 9.0], target: [4.5, 1.2, 1.0] },
   { id: 'stair', label: 'Staircase', group: 'Ground floor', pos: [4.6, 1.6, 6.3], target: [2.1, 1.7, 5.0] },

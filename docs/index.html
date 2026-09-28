@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>No. 45 — Double-Storey Terrace House (3D)</title>
-    <script type="module" crossorigin src="./assets/index-B7aW3XSM.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Br3AIGTu.css">
+    <script type="module" crossorigin src="./assets/index-D6rcbSEG.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-EDu3oPQ0.css">
   </head>
   <body>
     <div id="app"></div>
@@ -34,6 +34,9 @@
           </div>
           <button class="chip" id="chip-dims">📐 Dimensions</button>
           <button class="chip" id="btn-measure">📏 Measure</button>
+          <button class="chip" id="btn-renovation" aria-pressed="false" title="Compare the existing house with the proposed extensions and automatic gate">Structure renovation: Off</button>
+          <label class="chip select-chip disabled" id="chip-interior" title="Interior design is available after the structure renovation is applied">🛋️ <select id="interior" disabled><option value="none">Interior design: Off</option></select></label>
+          <button class="chip" id="btn-lights" hidden title="Interior lights: Auto switches them on from sunset to sunrise (follows the sun clock)">💡 Lights: Auto</button>
           <input type="checkbox" id="chk-dims" hidden />
         </div>
 
@@ -58,7 +61,7 @@
                 <p><b>Orbit</b>: left-drag rotate · right-drag pan · wheel zoom (to cursor) · double-click to focus · <kbd>W A S D</kbd>/<kbd>Q E</kbd> fly.</p>
                 <p><b>Walk</b>: click to capture mouse · <kbd>W A S D</kbd> move · <kbd>Shift</kbd> run · climbs stairs · <kbd>Esc</kbd> release.</p>
                 <p><b>Doors &amp; windows</b>: click any of them (in walk mode aim the crosshair and click) to open / close.</p>
-                <p><kbd>V</kbd> orbit/walk · <kbd>M</kbd> measure · <kbd>L</kbd> dimensions · <kbd>1 2 3</kbd> levels · <kbd>P</kbd> photoreal · <kbd>T</kbd> sun &amp; time · <kbd>N</kbd> face north · <kbd>H</kbd> hide UI.</p>
+                <p><kbd>V</kbd> orbit/walk · <kbd>M</kbd> measure · <kbd>L</kbd> dimensions · <kbd>1 2 3</kbd> levels · <kbd>P</kbd> photoreal · <kbd>F</kbd> feng shui · <kbd>T</kbd> sun &amp; time · <kbd>N</kbd> face north · <kbd>H</kbd> hide UI.</p>
               </div>
             </details>
           </div>
@@ -93,6 +96,47 @@
             </div>
             <label class="row"><span>Sun strength</span><input type="range" id="sunk" min="0" max="2" step="0.05" value="1" /></label>
             <div class="hint-small">Malaysia time (UTC+8) · Kuala Lumpur 3.14° N, 101.69° E · house front faces south.</div>
+          </div>
+        </div>
+
+        <!-- feng shui: collapsed summary row (grid on/off pill), expands into the advice -->
+        <div id="fs-card" class="card">
+          <div id="fs-summary" class="summary-row" role="button" tabindex="0" title="Feng shui advice">
+            <span class="sun-ico">☯️</span>
+            <span class="sum-text">
+              <span class="sum-main fs-main" data-i18n="title">Feng shui · 风水</span>
+              <span class="sum-sub" data-i18n="subtitle">坎宅 · sits north, faces south · East-group house</span>
+            </span>
+            <button id="btn-fengshui" class="pill" aria-pressed="false" title="Show the feng shui grid on the floors (F)">Grid off</button>
+            <svg class="chev" viewBox="0 0 24 24"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
+          </div>
+          <div class="expand">
+            <div class="fs-top">
+              <div class="hint-small" data-i18n="meta">Eight Mansions (八宅) · 3 × 3 Lo Shu grid on each floor</div>
+              <div class="seg small fs-lang" id="fs-lang"><button data-v="en" class="on">EN</button><button data-v="zh">中文</button></div>
+            </div>
+            <label class="row"><span data-i18n="gridFor">Grid shows stars for</span><select id="fs-for"></select></label>
+            <div id="fs-legend" class="fs-legend"></div>
+            <details open>
+              <summary data-i18n="general">Whole-house layout</summary>
+              <ul id="fs-general" class="fs-list"></ul>
+            </details>
+            <details open>
+              <summary data-i18n="rooms">Room by room</summary>
+              <ul id="fs-rooms" class="fs-list"></ul>
+            </details>
+            <details open>
+              <summary data-i18n="people">Occupants (personal Kua 命卦)</summary>
+              <div class="hint-small" data-i18n="peopleHint">Add the birth date and gender of each person living here to see their lucky directions and best bedroom. Saved in this browser only.</div>
+              <div id="fs-people"></div>
+              <div class="fs-add">
+                <input id="fs-name" type="text" placeholder="Name" />
+                <input id="fs-birth" type="date" />
+                <select id="fs-gender"><option value="m" data-i18n="male">Male</option><option value="f" data-i18n="female">Female</option></select>
+                <button id="fs-add" class="flat" data-i18n="add">Add</button>
+              </div>
+            </details>
+            <div class="hint-small" data-i18n="disclaimer">A traditional reading for reference, not a professional consultation. The house is taken as facing due south. An exact compass bearing, and the build or move-in year for Flying Stars (玄空飞星), would refine it.</div>
           </div>
         </div>
       </div>

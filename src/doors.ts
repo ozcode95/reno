@@ -10,7 +10,7 @@ export interface SwingLeafSpec extends Omit<LeafOpts, 'angle'> {
   maxAngle: number;
   open?: boolean;
   /** scene group the leaf belongs to (so it hides with its floor) */
-  level?: 'gf' | 'ff';
+  level?: 'gf' | 'ff' | 'site';
 }
 
 /**
@@ -20,7 +20,7 @@ export interface SwingLeafSpec extends Omit<LeafOpts, 'angle'> {
 export interface MovableSpec extends MovablePart {
   id: string;
   label: string;
-  level?: 'gf' | 'ff';
+  level?: 'gf' | 'ff' | 'site';
 }
 
 export interface Movable {
@@ -105,6 +105,13 @@ export class Openables {
     return leaf;
   }
 
+  clear() {
+    for (const leaf of this.leaves) leaf.pivot.removeFromParent();
+    this.leaves.length = 0;
+    this.groups.clear();
+    this.moving = false;
+  }
+
   get meshes(): THREE.Mesh[] {
     return this.leaves.flatMap((l) => l.meshes);
   }
@@ -121,6 +128,9 @@ export class Openables {
 
   toggle(leaf: Movable | undefined, open = !leaf?.open) {
     if (!leaf) return;
+    if (leaf.spec.id.startsWith('auto-gate-')) {
+      for (const other of this.leaves) if (other.spec.id.startsWith('auto-gate-')) other.open = open;
+    }
     const g = leaf.spec.group ? this.groups.get(leaf.spec.group) : undefined;
     if (g) {
       // step the whole group one stage: open fully, then close back stage by stage
