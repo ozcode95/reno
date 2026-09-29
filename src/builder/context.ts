@@ -8,7 +8,7 @@ export function buildWorld(kit: Kit, renovated = false, interior: InteriorStyle 
   const mainG: UnitOpts['G'] = (g) => g;
   kit.setTransform(null);
   kit.remap = {};
-  buildUnit(kit, { main: true, G: mainG, renovated });
+  buildUnit(kit, { main: true, G: mainG, renovated, interior });
   partyWall(kit, 0, 'west', mainG, 1, renovated);
   partyWall(kit, 6.096, 'east', mainG, -1, renovated);
   buildStreet(kit, renovated);

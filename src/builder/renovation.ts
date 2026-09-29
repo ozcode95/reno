@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Kit } from './kit';
 import type { UnitOpts } from './house';
-import { wall, skin, casement, slidingDoor, hingedDoorLeaf, toilet, basin, shower, floorTrap, type MovableSink } from './fixtures';
+import { wall, skin, casement, slidingDoor, roomSlidingDoor, hingedDoorLeaf, toilet, basin, shower, floorTrap, type MovableSink } from './fixtures';
 import { leafMovable, type MovableSpec } from '../doors';
 import { W, Z_LOT_REAR, Z_RENOVATED_BED4_REAR, RENOVATED_REAR_DOOR, RENOVATED_KITCHEN_WINDOW, Z_FRONT, Z_MASTER_EXTENSION_FRONT, X_BATH_W, Y_FF, Y_FF_CEIL, Y_GF_CEIL } from '../config';
 
@@ -24,7 +24,7 @@ function extensionRoof(kit: Kit, x0: number, x1: number, z0: number, z1: number,
   kit.box(x0, x1, ceiling - 0.03, low, eaveZ - 0.02, eaveZ + 0.02, 'fascia');
 }
 
-export function buildRearExtension(kit: Kit, G: UnitOpts['G'], mv: Windows, parts: MovableSpec[]) {
+export function buildRearExtension(kit: Kit, G: UnitOpts['G'], mv: Windows, parts: MovableSpec[], japaneseLayout = false) {
   const z = Z_LOT_REAR;
   kit.group = G('gf');
   const window = { a: 0.45, b: 1.45, y0: 1.75, y1: 2.4 };
@@ -35,17 +35,30 @@ export function buildRearExtension(kit: Kit, G: UnitOpts['G'], mv: Windows, part
   casement(kit, 'x', z, window.a, window.b, window.y0, window.y1,
     { panes: 2, glass: 'glassFrosted', hung: 'top', movable: mv('win-bath3', 'Relocated bathroom window', 'gf') });
   wall(kit, 'x', Z_RENOVATED_BED4_REAR, 0.05, 1.96, 0, Y_GF_CEIL, 0.12, 'wallInt', 'bathWall');
-  wall(kit, 'z', 1.9, z + 0.1, Z_RENOVATED_BED4_REAR - 0.06, 0, Y_GF_CEIL, 0.12, 'wallInt', 'bathWall', [{ a: -1.35, b: -0.51, y0: 0, y1: 2.1 }]);
-  kit.box(0.05, 1.84, 0, 0.006, z + 0.1, Z_RENOVATED_BED4_REAR - 0.06, 'bathFloor');
-  const { angle: _, ...leaf } = hingedDoorLeaf(kit, 'z', 1.9, 0.12, -1.35, -0.51, 0, 2.1,
+  // Swap the Japanese layout's entrance with the former corridor laundry position.
+  const door = japaneseLayout ? { a: -2.4, b: -1.34 } : { a: -1.35, b: -0.51 };
+  wall(kit, 'z', 1.9, z + 0.1, Z_RENOVATED_BED4_REAR - 0.06, 0, Y_GF_CEIL, 0.12, 'wallInt', 'bathWall', [{ ...door, y0: 0, y1: 2.1 }]);
+  const floorY = japaneseLayout ? 0 : 0.006;
+  kit.box(0.05, 1.84, -0.3, floorY, z + 0.1, Z_RENOVATED_BED4_REAR - 0.06, 'bathFloor');
+  if (japaneseLayout) {
+    parts.push({ ...roomSlidingDoor(kit, 1.9, door.a, door.b, 1, 'doorBath'), id: 'bath3', label: 'Bathroom 3 sliding door', level: 'gf' });
+  } else {
+  const { angle: _, ...leaf } = hingedDoorLeaf(kit, 'z', 1.9, 0.12, door.a, door.b, 0, 2.1,
     { hingeAtB: true, openTo: -1, angle: 1.4, mat: 'doorBath', frameW: 0.035 });
   parts.push(leafMovable({ ...leaf, id: 'bath3', label: 'Relocated bathroom door', level: 'gf', maxAngle: 1.4 }));
-  // Washbasin on the corridor face, between the bathroom door and the rear corner.
-  basin(kit, 1.968, 0.84, -1.95, Math.PI / 2);
-  // Keep the entrance clear; toilet at the rear right and shower at the rear left.
-  toilet(kit, 1.3, 0.006, z + 0.108, 0);
-  shower(kit, 0.058, 0.006, -2.1, Math.PI / 2);
-  floorTrap(kit, 0.55, 0.006, -2.05);
+  }
+  if (japaneseLayout) {
+    // Keep the middle clear for turning; the open shower shares the level floor.
+    basin(kit, 0.45, 0.84, Z_RENOVATED_BED4_REAR - 0.068, Math.PI);
+    toilet(kit, 1.38, floorY, Z_RENOVATED_BED4_REAR - 0.068, Math.PI);
+    shower(kit, 0.28, floorY, z + 0.108, 0);
+    floorTrap(kit, 0.55, floorY, -2.3);
+  } else {
+    basin(kit, 1.968, 0.84, -1.95, Math.PI / 2);
+    toilet(kit, 1.3, 0.006, z + 0.108, 0);
+    shower(kit, 0.058, 0.006, -2.1, Math.PI / 2);
+    floorTrap(kit, 0.55, 0.006, -2.05);
+  }
   const kw = RENOVATED_KITCHEN_WINDOW;
   slidingDoor(kit, 'x', z, kw.a, kw.b, kw.y0, kw.y1,
     { panels: 2, glass: 'glass', movable: mv('win-kitchen', 'Kitchen sliding window', 'gf'), group: 'win-kitchen' });

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildRearExtension, buildMasterExtension, buildAutoGate, buildLKitchen } from './renovation';
 import type { Kit, P2 } from './kit';
+import type { InteriorStyle } from './interior';
 import {
   W, T_EXT, T_PARTY, T_INT, Z_FRONT, Z_LOT_REAR, Y_RENOVATED_GF_CEIL, Z_RENOVATED_BED4_REAR, RENOVATED_REAR_DOOR, Y_FF, Y_GF_CEIL, Y_FF_CEIL, Y_WALL_TOP, RISE, STAIR_TREADS,
   Z_STAIR_N, Z_CORE_S, Z_LIVING_N, X_STAIR_E, X_STAIR_W_STRIP, X_WELL_E, X_KITCHEN_OPEN_W, X_KITCHEN_OPEN_E, X_STAIR_FOOT, X_STAIR_TOP, X_BATH_W, Z_BATH_SPLIT,
@@ -11,7 +12,7 @@ import {
   X_DOOR_A, X_DOOR_B,
 } from '../config';
 import {
-  wall, skin, lbox, jalousie, doorFrame, hingedDoor, hingedDoorLeaf, type HingedOpts, casement, slidingDoor, surround, railing,
+  wall, skin, lbox, jalousie, doorFrame, hingedDoor, hingedDoorLeaf, type HingedOpts, casement, slidingDoor, roomSlidingDoor, surround, railing,
   toilet, basin, shower, floorTrap, plate, wallOutlet, gateLeaf, type Opening,
 } from './fixtures';
 import { leafMovable, type SwingLeafSpec, type MovableSpec } from '../doors';
@@ -103,6 +104,7 @@ function openable(id: string, label: string, level: 'gf' | 'ff'): MovableSink {
 export interface UnitOpts {
   main: boolean;
   renovated?: boolean;
+  interior?: InteriorStyle;
   /** maps logical group → kit group */
   G: (g: 'gf' | 'slab1' | 'ff' | 'ceil2' | 'roof' | 'site') => string;
 }
@@ -216,7 +218,7 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
   ];
   if (renovated) {
     kit.box(1.51, W - hp, Y_GF_CEIL - 0.3, Y_FF, -he, he, 'wallInt');
-    buildRearExtension(kit, G, mv, movSpecs);
+    buildRearExtension(kit, G, mv, movSpecs, o.interior === 'japanese');
   } else wall(kit, 'x', 0, hp, W - hp, -0.15, Y_FF, T_EXT, 'wallInt', 'wallExt', gfRearOpen, 'wallInt');
   const gfFrontOpen: Opening[] = [
     { a: X_DOOR_A, b: X_DOOR_B, y0: 0, y1: 2.4 },
@@ -262,7 +264,7 @@ export function buildUnit(kit: Kit, o: UnitOpts) {
   kit.box(X_PILLAR_E - 0.04, X_PILLAR_E, yC - 0.03, yC + 0.03, (zC + zP) / 2 - 0.015, (zC + zP) / 2 + 0.015, 'black');
   kit.box((X_PILLAR_E + W) / 2 - 0.015, (X_PILLAR_E + W) / 2 + 0.015, yC - 0.03, yC + 0.03, Z_BATH_BOX, Z_BATH_BOX + 0.04, 'black');
 
-  if (main) buildGroundInterior(kit, renovated);
+  if (main) buildGroundInterior(kit, renovated, renovated && o.interior === 'japanese');
 
   /* ---------------- First floor slab & balcony slab ---------------- */
   kit.group = G('slab1');
@@ -514,15 +516,20 @@ function gangSwitch(kit: Kit, x: number, y: number, zf: number, normal: 'px' | '
   }
 }
 
-function buildGroundInterior(kit: Kit, renovated = false) {
+function buildGroundInterior(kit: Kit, renovated = false, japaneseLayout = false) {
   const H = Y_GF_CEIL;
   const WI = 'wallInt';
+  const bedDoor: readonly [number, number] = japaneseLayout ? [3.26, 4.32] : DR.bed4;
   const bathEast = 3.88; // shorten the partition beside the rear kitchen door by 10 cm
   // floors
   const floor = (x0: number, x1: number, z0: number, z1: number, mat: string, top = 0) => kit.box(x0, x1, -0.3, top, z0, z1, { py: mat, rest: 'concreteLight' });
   if (renovated) {
     // Continuous tile surface across the former bathroom and rear-wall boundaries.
-    floor(hp, W - hp, Z_LOT_REAR + he, Z_FRONT - he, 'floorTile');
+    if (japaneseLayout) {
+      // Bathroom builder supplies its flush floor; avoid overlapping coplanar tiles.
+      floor(hp, W - hp, Z_RENOVATED_BED4_REAR - hi, Z_FRONT - he, 'floorTile');
+      floor(1.84, W - hp, Z_LOT_REAR + he, Z_RENOVATED_BED4_REAR - hi, 'floorTile');
+    } else floor(hp, W - hp, Z_LOT_REAR + he, Z_FRONT - he, 'floorTile');
   } else {
     floor(1.51 + hi, bathEast - hi, he, 1.53 - hi, 'bathFloor', -0.015);
     floor(hp, 1.51 + hi, he, 1.53 - hi, 'floorTile');
@@ -545,7 +552,7 @@ function buildGroundInterior(kit: Kit, renovated = false) {
   wall(kit, 'z', bathEast, he, 1.53 - hi, 0, H, T_INT, WI, WI, [{ a: DR.bath3[0], b: DR.bath3[1], y0: 0, y1: 2.1 }]);
   }
   wall(kit, 'z', 3.1, renovated ? Z_RENOVATED_BED4_REAR + hi : 1.53 + hi, Z_STAIR_N - hi, 0, H, T_INT, WI, WI,
-    [...(renovated ? [bedroomSideWindow] : []), { a: DR.bed4[0], b: DR.bed4[1], y0: 0, y1: 2.1 }]);
+    [...(renovated ? [bedroomSideWindow] : []), { a: bedDoor[0], b: bedDoor[1], y0: 0, y1: 2.1 }]);
   // stair back wall runs on past the foot of flight 1 as a short pier, then the kitchen opening (photos 101153 / 101157)
   wall(kit, 'x', Z_STAIR_N, hp, X_KITCHEN_OPEN_W, 0, H, T_INT, WI, WI);
   wall(kit, 'x', Z_STAIR_N, X_KITCHEN_OPEN_E, W - hp, 0, H, T_INT, WI, WI);
@@ -625,7 +632,9 @@ function buildGroundInterior(kit: Kit, renovated = false) {
 
   // doors (open like in the photos)
   if (!renovated) swingDoor(kit, 'bath3', 'Bathroom 3 door', 'gf', 'z', bathEast, T_INT, ...DR.bath3, 0, 2.1, { hingeAtB: true, openTo: -1, angle: deg(80), mat: 'doorBath', frameW: FW });
-  swingDoor(kit, 'bed4', 'Bedroom 4 door', 'gf', 'z', 3.1, T_INT, ...DR.bed4, 0, 2.1, { hingeAtB: true, openTo: -1, angle: deg(78), mat: 'doorWood', frameW: FW });
+  if (japaneseLayout) {
+    movSpecs.push({ ...roomSlidingDoor(kit, 3.1, ...bedDoor, -1, 'doorWood'), id: 'bed4', label: 'Bedroom 4 sliding door', level: 'gf' });
+  } else swingDoor(kit, 'bed4', 'Bedroom 4 door', 'gf', 'z', 3.1, T_INT, ...bedDoor, 0, 2.1, { hingeAtB: true, openTo: -1, angle: deg(78), mat: 'doorWood', frameW: FW });
 
   // electrical
   lbox(kit, 'x', Z_FRONT, 2.6, 2.9, 1.72, 2.12, -he - 0.09, -he, 'plasticWhite'); // DB box
@@ -669,8 +678,13 @@ function buildGroundInterior(kit: Kit, renovated = false) {
   if (!renovated) bigSwitch(kit, bathEast + hi, 1.35, 0.446, 'px');
   if (!renovated) bigSwitch(kit, bathEast + hi, 1.35, 0.354, 'px', true);
   // Bedroom 4, beside the door: two large-rocker switches, aircon socket high up, low UK socket
-  bigSwitch(kit, 3.1 - hi, 1.35, 3.204, 'nx');
-  bigSwitch(kit, 3.1 - hi, 1.35, 3.296, 'nx');
+  if (japaneseLayout) {
+    bigSwitch(kit, 2.6, 1.05, Z_STAIR_N - hi, 'nz');
+    bigSwitch(kit, 2.692, 1.05, Z_STAIR_N - hi, 'nz');
+  } else {
+    bigSwitch(kit, 3.1 - hi, 1.35, 3.204, 'nx');
+    bigSwitch(kit, 3.1 - hi, 1.35, 3.296, 'nx');
+  }
   wallOutlet(kit, 3.1 - hi, 2.4, 3.25 - 0.5, 'nx'); // air-conditioner socket, 0.5 m left of the switches
   wallOutlet(kit, 3.1 - hi, 0.3, 2.2, 'nx'); // low UK socket (was a blank plate)
   // stair-foot switch: on the bedroom-4 wall face just above the first treads (photo 101157)

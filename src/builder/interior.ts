@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import type { Kit } from './kit';
+import { wallOutlet, plate } from './fixtures';
 import {
   W, T_PARTY, T_INT, Y_FF, Y_FF_CEIL, Y_RENOVATED_GF_CEIL, Y_BATH1_CEIL, Z_STAIR_N, Z_LIVING_N, Z_MASTER_EXTENSION_FRONT, Z_LOT_REAR,
-  Z_BATH_SPLIT, X_BATH_W, X_DOOR_A, X_DOOR_B,
+  Z_BATH_SPLIT, X_BATH_W, X_DOOR_A, X_DOOR_B, Y_PORCH, Z_RENOVATED_BED4_REAR,
+  RISE, STAIR_TREADS, X_STAIR_W_STRIP, X_STAIR_TOP,
 } from '../config';
 
 /*
@@ -100,20 +102,23 @@ function doorFronts(kit: Kit, w: number, y0: number, y1: number, zf: number, doo
 }
 
 /** low oak platform bed; head at local −z, nightstands with paper lamps either side of the head */
-function bed(kit: Kit, w: number, l: number) {
+function bed(kit: Kit, w: number, l: number, withNightstands = true) {
   const x = w / 2, z = l / 2;
   kit.box(-x + 0.1, x - 0.1, 0, 0.1, -z + 0.1, z - 0.1, OAK_D); // recessed plinth: the bed seems to float
   kit.box(-x, x, 0.1, 0.28, -z, z, OAK);
   kit.box(-x + 0.05, x - 0.05, 0.28, 0.48, -z + 0.08, z - 0.05, LINEN); // mattress
   kit.box(-x + 0.03, x - 0.03, 0.34, 0.53, -z + 0.8, z - 0.03, LINEN_G); // duvet over the lower two thirds
   kit.box(-x + 0.02, x - 0.02, 0.52, 0.545, z - 0.55, z - 0.25, CUSHION); // bed runner
-  const pw = Math.min(0.62, w / 2 - 0.1);
-  for (const s of [-1, 1]) kit.box(s * (w / 4) - pw / 2, s * (w / 4) + pw / 2, 0.48, 0.6, -z + 0.12, -z + 0.5, LINEN);
+  const single = w < 1.2;
+  const pw = single ? 0.62 : Math.min(0.62, w / 2 - 0.1);
+  for (const px of single ? [0] : [-w / 4, w / 4]) kit.box(px - pw / 2, px + pw / 2, 0.48, 0.6, -z + 0.12, -z + 0.5, LINEN);
   kit.box(-x, x, 0.28, 0.95, -z, -z + 0.05, OAK); // low headboard
   // concealed warm LED strip behind the headboard washes the wall
   kit.box(-x + 0.05, x - 0.05, 0.93, 0.94, -z - 0.005, -z, LED);
-  for (const s of [-1, 1]) at(kit, s * (x + 0.25), 0, -z + 0.2, 0, () => nightstand(kit));
-  lamp(kit, 0, 1.25, -z + 0.45, 0.6, { distance: 3.5 }); // bedside lamps + headboard glow
+  if (withNightstands) {
+    for (const s of [-1, 1]) at(kit, s * (x + 0.25), 0, -z + 0.2, 0, () => nightstand(kit));
+  }
+  lamp(kit, 0, 1.25, -z + 0.45, withNightstands ? 0.6 : 0.2, { distance: 3.5 }); // bedside lamps + headboard glow
 }
 
 function nightstand(kit: Kit) {
@@ -172,7 +177,7 @@ function chair(kit: Kit) {
 }
 
 /** floating TV console with a TV, soundbar and Wi-Fi router; back at local −z */
-function tvConsole(kit: Kit, w: number) {
+function tvConsole(kit: Kit, w: number, withSoundbar = true) {
   const d = 0.42, h = 0.42;
   kit.box(-w / 2 + 0.1, w / 2 - 0.1, 0, 0.14, -d / 2, d / 2 - 0.08, OAK_D);
   kit.box(-w / 2, w / 2, 0.14, h, -d / 2, d / 2, OAK);
@@ -183,8 +188,10 @@ function tvConsole(kit: Kit, w: number) {
   kit.box(-0.035, 0.035, h, h + 0.1, z - 0.02, z, 'black');
   kit.box(-0.73, 0.73, h + 0.07, h + 0.91, z - 0.03, z, 'black'); // 65" TV
   kit.box(-0.72, 0.72, h + 0.08, h + 0.9, z, z + 0.002, SCREEN);
-  kit.box(-0.45, 0.45, h, h + 0.065, 0.06, 0.15, 'black'); // soundbar
-  kit.box(-0.44, 0.44, h + 0.008, h + 0.057, 0.15, 0.151, 'plasticGrey');
+  if (withSoundbar) {
+    kit.box(-0.45, 0.45, h, h + 0.065, 0.06, 0.15, 'black'); // soundbar
+    kit.box(-0.44, 0.44, h + 0.008, h + 0.057, 0.15, 0.151, 'plasticGrey');
+  }
   kit.box(w / 2 - 0.3, w / 2 - 0.08, h, h + 0.035, -0.12, 0.02, WHITE); // router
   kit.box(w / 2 - 0.1, w / 2 - 0.093, h + 0.012, h + 0.019, 0.02, 0.021, 'switchIndicatorRed');
 }
@@ -313,13 +320,6 @@ function waterHeater(kit: Kit) {
   kit.box(-0.11, 0.11, 0, 0.34, 0, 0.085, WHITE);
   kit.box(-0.07, 0.07, 0.2, 0.26, 0.085, 0.087, SCREEN);
   kit.box(0.02, 0.05, 0.215, 0.23, 0.087, 0.088, 'switchIndicatorRed');
-}
-
-function airPurifier(kit: Kit) {
-  kit.box(-0.13, 0.13, 0, 0.62, -0.13, 0.13, WHITE);
-  kit.box(-0.11, 0.11, 0.62, 0.625, -0.11, 0.11, 'plasticGrey');
-  kit.box(-0.1, 0.1, 0.08, 0.4, 0.13, 0.132, 'plasticGrey');
-  kit.box(-0.02, 0.02, 0.5, 0.51, 0.13, 0.132, LED);
 }
 
 /* ------------------------------------------------------------------ */
@@ -488,41 +488,77 @@ export function buildInterior(kit: Kit, style: InteriorStyle) {
   kit.uvFn = prevUV;
 }
 
+/** Full-height storage under the landing/upper flight; doors follow the sloping soffit. */
+function underStairWardrobe(kit: Kit) {
+  const landingRiser = STAIR_TREADS.lower + 3 + STAIR_TREADS.middle;
+  const tread = (X_STAIR_TOP - X_STAIR_W_STRIP) / STAIR_TREADS.upper;
+  const top = (x: number) => landingRiser * RISE - 0.16 - 0.025
+    + Math.max(0, x - X_STAIR_W_STRIP) * RISE / tread;
+  const back = Z_LIVING_N - hi - 0.02, front = back - 0.6;
+  const edges = [hp + 0.02, 0.61, X_STAIR_W_STRIP, 1.68, 2.21, X_STAIR_TOP - 0.02];
+  kit.box(edges[0], edges[edges.length - 1], 0, 0.08, front + 0.04, back, OAK_D);
+  for (let i = 0; i < edges.length - 1; i++) {
+    const a = edges[i] + 0.003, b = edges[i + 1] - 0.003;
+    kit.prismXY([[a, 0.08], [b, 0.08], [b, top(b)], [a, top(a)]], front, back, OAK, () => OAK);
+    const x = b - 0.045;
+    kit.box(x - 0.006, x + 0.006, 0.95, 1.25, front - 0.018, front, OAK_D);
+    // Upper cupboard joint follows the underside of the stair.
+    kit.prismXY([[a, top(a) - 0.453], [b, top(b) - 0.453],
+      [b, top(b) - 0.447], [a, top(a) - 0.447]], front - 0.002, front, OAK_D, () => OAK_D);
+  }
+}
+
+function gamingConsole(kit: Kit) {
+  kit.box(-0.16, 0.16, 0, 0.07, -0.07, 0.07, 'black');
+  kit.box(-0.14, 0.14, 0.025, 0.03, 0.07, 0.072, SCREEN);
+  kit.box(0.11, 0.125, 0.04, 0.046, 0.07, 0.073, LED);
+  // Two controllers beside the console.
+  for (const x of [-0.3, 0.3]) {
+    kit.box(x - 0.065, x + 0.065, 0, 0.035, -0.04, 0.045, WHITE);
+    for (const dx of [-0.025, 0.025]) geom(kit, new THREE.CylinderGeometry(0.009, 0.009, 0.008, 12), 'black', x + dx, 0.039, 0);
+  }
+}
+
 function groundFloor(kit: Kit) {
   kit.group = 'gf';
   const yC = Y_RENOVATED_GF_CEIL;
   const zLiv = Z_LIVING_N + hi; // living back-wall face
+  underStairWardrobe(kit);
 
   // --- 神台: on the living back wall, straight ahead of the front door
-  const doorMid = (X_DOOR_A + X_DOOR_B) / 2;
+  const doorMid = (X_DOOR_A + X_DOOR_B) / 2 - 0.25; // shift altar 250 mm left
   at(kit, doorMid, 0, zLiv + 0.275, FACE.pz, () => altar(kit));
   slatWallZ(kit, doorMid + 0.8, 3.0, zLiv, 0, yC); // slats continue beside the altar
 
   // --- living room: low sofa facing a floating TV console on the east wall (TV outlets at z ≈ 9.8)
-  rug(kit, 2.95, 5.35, 8.55, 11.05, 0);
-  at(kit, 2.75, 0, 9.8, FACE.px, () => sofa(kit, 2.4));
-  at(kit, 3.95, 0, 9.8, FACE.px, () => table(kit, 1.1, 0.6, 0.36, 0.045, true));
-  at(kit, XE - 0.03 - 0.21, 0, 9.8, FACE.nx, () => tvConsole(kit, 2.0));
-  ceilingFan(kit, 3.95, 9.8, yC, 7);
-  at(kit, 2.75, 0, 11.3, 0, () => andon(kit));
+  // Leave about 1 m between the altar top and the sofa's rearward end.
+  const sofaZ = 10.35;
+  rug(kit, 2.95, 5.35, 8.95, 11.5, 0);
+  at(kit, 2.75, 0, sofaZ, FACE.px, () => sofa(kit, 2.2));
+  at(kit, 3.95, 0, sofaZ, FACE.px, () => table(kit, 1.1, 0.6, 0.36, 0.045, true));
+  at(kit, XE - 0.03 - 0.21, 0, sofaZ, FACE.nx, () => tvConsole(kit, 2.0));
+  ceilingFan(kit, 3.95, sofaZ, yC, 7);
   at(kit, XE, 2.47, 9.9, FACE.nx, () => airCon(kit)); // over the high socket
-  at(kit, 5.75, 0, 11.35, FACE.nz, () => airPurifier(kit));
-  // genkan: floating shoe cabinet along the west wall, inside the front door
-  at(kit, hp + 0.19, 0, 10.65, FACE.px, () => shoeCabinet(kit, 1.5));
+  // Floating shoe cabinet outside on the covered porch, clear of the entrance steps.
+  kit.group = 'site';
+  at(kit, hp + 0.19, Y_PORCH, 13.35, FACE.px, () => shoeCabinet(kit, 1.5));
+  kit.group = 'gf';
 
   // --- former dining (stair foot): sideboard with a paper lamp, kept open for circulation
   at(kit, XE - 0.01 - 0.225, 0, 6.15, FACE.nx, () => sideboard(kit, 1.8));
 
   // --- dining, now at the back in the open former kitchen, next to the L-kitchen
-  const dx = 4.45, dz = 2.35;
-  at(kit, dx, 0, dz, FACE.pz, () => {
+  const dx = XE - 0.425, dz = 2.35;
+  at(kit, dx, 0, dz, FACE.px, () => {
     table(kit, 1.5, 0.85, 0.72, 0.06);
     for (const x of [-0.38, 0.38]) {
-      at(kit, x, 0, 0.425 + 0.12, FACE.nz, () => chair(kit));
       at(kit, x, 0, -0.425 - 0.12, FACE.pz, () => chair(kit));
     }
+    // Keep two seats on the open long side; move the wall-side pair to the ends.
+    at(kit, -0.87, 0, 0, FACE.px, () => chair(kit));
+    at(kit, 0.87, 0, 0, FACE.nx, () => chair(kit));
   });
-  for (const x of [dx - 0.38, dx + 0.38]) pendant(kit, x, dz, yC, 1.55, 'drum', 0.17, 0);
+  for (const z of [dz - 0.38, dz + 0.38]) pendant(kit, dx, z, yC, 1.55, 'drum', 0.17, 0);
   lamp(kit, dx, 1.6, dz, 4.5);
 
   // --- kitchen: fridge at the end of the east leg, appliances on the worktop, lights
@@ -538,17 +574,37 @@ function groundFloor(kit: Kit) {
   downlight(kit, 4.3, -1.3, yC, 3.5);
   downlight(kit, 2.8, -1.4, yC, 2); // back-door passage
 
-  // --- bathroom 3: washing machine by the door, water heater at the shower, downlight
-  at(kit, 0.42, 0.006, -0.45, FACE.px, () => washingMachine(kit));
-  at(kit, 0.058, 1.5, -1.62, FACE.px, () => waterHeater(kit));
+  // --- laundry backed against the bedroom wall, facing the rear door
+  const washerZ = Z_RENOVATED_BED4_REAR - hi - 0.3;
+  at(kit, 2.28, 0, washerZ, FACE.nz, () => washingMachine(kit));
+  // Bathroom water heater at the shower, downlight.
+  at(kit, 0.65, 1.5, Z_LOT_REAR + 0.108, FACE.pz, () => waterHeater(kit));
   downlight(kit, 0.95, -1.35, yC, 2.5);
 
   // --- bedroom 4: platform bed with the head on the west wall, facing the sliding window
   const l4 = 2.05;
-  at(kit, hp + 0.01 + l4 / 2, 0, 1.75, FACE.px, () => bed(kit, 1.52, l4));
-  at(kit, 1.0, 0, Z_STAIR_N - hi - 0.3, FACE.nz, () => wardrobe(kit, 1.9));
+  at(kit, hp + 0.01 + l4 / 2, 0, 1.75, FACE.px, () => bed(kit, 1.0, l4, false));
+  at(kit, 0.525, 0, Z_STAIR_N - hi - 0.3, FACE.nz, () => wardrobe(kit, 0.95));
   at(kit, 3.1 - hi, 2.46, 2.75, FACE.nx, () => airCon(kit));
   ceilingLight(kit, 1.55, 2.2, yC, 4.5);
+
+  // Appliance outlets on adjacent dry wall faces, clear of worktops and cabinetry.
+  for (const z of [10.2, 10.3, 10.4]) wallOutlet(kit, XE, 0.55, z, 'nx'); // TV, soundbar, router
+  wallOutlet(kit, doorMid - 0.85, 0.9, zLiv, 'pz'); // altar lights
+  wallOutlet(kit, XE, 0.95, 6.15, 'nx'); // sideboard lamp
+  wallOutlet(kit, XE, 1.05, 1.3, 'nx'); // fridge, beside its footprint
+  wallOutlet(kit, 5.25, 1.25, zR, 'pz'); // microwave
+  wallOutlet(kit, XE, 1.25, zR + 0.45, 'nx'); // rice cooker
+  wallOutlet(kit, XE, 1.25, -0.15, 'nx'); // kettle
+  // Connection plates for fixed appliances; water heaters do not use general sockets.
+  plate(kit, XE, 2.35, hobZ, 'nx', 0.086); // cooker hood supply
+  plate(kit, XE, 0.65, hobZ + 0.45, 'nx', 0.086); // hob supply
+  plate(kit, 0.85, 1.55, zR, 'pz', 0.086); // bathroom 3 heater connection
+  wallOutlet(kit, 2.75, 1.05, Z_RENOVATED_BED4_REAR - hi, 'nz'); // washer, beside the machine
+  wallOutlet(kit, hp, 0.75, 1.75, 'px'); // bed headboard light
+  kit.group = 'site';
+  wallOutlet(kit, hp, 1.0, 13.35, 'px'); // covered-porch shoe cabinet light
+  kit.group = 'gf';
 }
 
 function firstFloor(kit: Kit) {
@@ -572,11 +628,20 @@ function firstFloor(kit: Kit) {
   at(kit, 3.04 + hi, y + 2.5, 1.6, FACE.px, () => airCon(kit));
   ceilingLight(kit, 4.57, 2.2, yC, 4.5);
 
-  // --- family hall: floor sofa on the east wall, low table, rug, lantern
-  rug(kit, 4.0, 5.95, 5.0, 7.0, y);
-  at(kit, XE - 0.02 - 0.4, y, 6.0, FACE.nx, () => sofa(kit, 1.9, 0.8));
-  at(kit, 4.6, y, 6.0, FACE.px, () => table(kit, 1.0, 0.6, 0.34, 0.045, true));
-  pendant(kit, 4.6, 6.0, yC, yC - 0.75, 'lantern', 0.26, 4.5);
+  // --- family hall: open exercise floor, compact relaxation sofa and gaming corner.
+  // Keep x=2.6..4.3, z=4.8..7.0 free of fixed furniture for yoga/stretching.
+  at(kit, 5.08, y, Z_STAIR_N + hi + 0.42, FACE.pz, () => sofa(kit, 1.75, 0.8));
+  at(kit, XE - 0.03 - 0.21, y, 6.4, FACE.nx, () => {
+    tvConsole(kit, 1.6, false);
+    at(kit, 0, 0.42, 0.115, 0, () => gamingConsole(kit));
+  });
+  // Loose yoga mat and two cork blocks; no coffee table or raised platform.
+  kit.box(3.05, 3.73, y + 0.001, y + 0.007, 4.95, 6.85, CUSHION);
+  for (const z of [5.05, 5.32]) kit.box(3.9, 4.05, y, y + 0.075, z, z + 0.23, OAK);
+  // Rolled spare mat stored beside the sofa, against the east wall.
+  geom(kit, new THREE.CylinderGeometry(0.09, 0.09, 0.65, 24), LINEN_G, XE - 0.15, y + 0.325, 5.48);
+  ceilingLight(kit, 4.25, 5.95, yC, 4.5, 0.32);
+  for (const z of [6.1, 6.2, 6.3, 6.4]) wallOutlet(kit, XE, y + 0.62, z, 'nx'); // TV, console, router and spare
   downlight(kit, 2.3, 7.0, yC, 1.5); // over the stair head
 
   // --- master bedroom: king bed on the west wall, wardrobe wall, tatami nook in the front extension
@@ -603,4 +668,11 @@ function firstFloor(kit: Kit) {
   downlight(kit, 5.0, 8.6, yB2, 4);
   at(kit, XE - 0.008, y + 1.5, 11.0, FACE.nx, () => waterHeater(kit));
   downlight(kit, 5.0, 10.85, Y_BATH1_CEIL, 3);
+
+  // Bedside lamps, headboard lights, desk lamps/laptops and the tatami lantern.
+  for (const z of [0.95, 2.0, 3.05, 9.1, 10.3, 11.5, 13.0]) wallOutlet(kit, hp, y + 0.75, z, 'px');
+  for (const z of [0.95, 2.0, 3.05]) wallOutlet(kit, XE, y + 0.75, z, 'nx');
+  for (const x of [1.3, 1.4, 4.75, 4.85]) wallOutlet(kit, x, y + 0.85, 0.1, 'pz');
+  plate(kit, 5.1, y + 1.65, Z_BATH_SPLIT - hi, 'nz', 0.086); // bathroom 2 heater connection
+  plate(kit, XE, y + 1.65, 11.25, 'nx', 0.086); // bathroom 1 heater connection
 }

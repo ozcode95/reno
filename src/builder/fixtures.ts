@@ -77,6 +77,28 @@ export function doorFrame(kit: Kit, axis: Axis, c: number, t: number, a: number,
   lbox(kit, axis, c, b - f - st, b - f, y0, y1 - f, -0.015, 0.015, mat);
 }
 
+/** Surface-mounted single sliding leaf on the inside of a Z-aligned partition; no floor track. */
+export function roomSlidingDoor(kit: Kit, c: number, a: number, b: number, direction: 1 | -1, mat: string): MovablePart {
+  doorFrame(kit, 'z', c, 0.12, a, b, 0, 2.1, 'frameSage', undefined, 0.035);
+  // Extend the jambs and head to the sliding leaf to close oblique sight lines
+  // through the stand-off from the wall. Keep the opening free of a floor track.
+  for (const [z0, z1] of [[a - 0.035, a + 0.025], [b - 0.025, b + 0.035]]) {
+    kit.box(c - 0.12, c - 0.06, 0, 2.12, z0, z1, 'frameSage');
+  }
+  kit.box(c - 0.12, c - 0.06, 2.065, 2.13, a - 0.035, b + 0.035, 'frameSage');
+  const travel = b - a + 0.05;
+  const za = Math.min(a, a + direction * travel), zb = Math.max(b, b + direction * travel);
+  kit.box(c - 0.14, c - 0.08, 2.12, 2.17, za - 0.04, zb + 0.04, 'aluSilver');
+  return { kind: 'slide', index: 0, offset: [0, direction * travel], build: (k) => {
+    k.box(c - 0.16, c - 0.12, 0.008, 2.11, a - 0.025, b + 0.025, mat);
+    k.box(c - 0.155, c - 0.125, 0, 0.008, a - 0.025, b + 0.025, mat); // bottom privacy seal
+    const handleZ = direction > 0 ? a + 0.09 : b - 0.09;
+    for (const x of [c - 0.175, c - 0.105]) {
+      k.box(x - 0.006, x + 0.006, 0.85, 1.1, handleZ - 0.015, handleZ + 0.015, 'chrome');
+    }
+  } };
+}
+
 export interface LeafOpts {
   hinge: [number, number];
   dir: [number, number]; // unit: hinge → latch (closed)
