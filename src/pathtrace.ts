@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { DenoiseMaterial, WebGLPathTracer } from 'three-gpu-pathtracer';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 
 /**
@@ -13,6 +13,7 @@ export class PathTraceMode {
   building = false;
   private pt: WebGLPathTracer | null = null;
   private worker: ParallelMeshBVHWorker | null = null;
+  private denoise = new DenoiseMaterial({ sigma: 2, kSigma: 1.5, threshold: 0.1 });
   onStatus?: (s: string) => void;
 
   constructor(private renderer: THREE.WebGLRenderer, private scene: THREE.Scene, private camera: THREE.PerspectiveCamera) {}
@@ -30,16 +31,34 @@ export class PathTraceMode {
     this.active = true;
     if (!this.pt) {
       this.pt = new WebGLPathTracer(this.renderer);
-      this.pt.bounces = 6;
-      this.pt.transmissiveBounces = 8;
-      this.pt.filterGlossyFactor = 0.4;
-      this.pt.minSamples = 1;
-      this.pt.renderDelay = 0;
+      this.pt.bounces = 10;
+      this.pt.transmissiveBounces = 12;
+      this.pt.filterGlossyFactor = 0.25;
+      this.pt.minSamples = 8;
+      this.pt.renderDelay = 120;
       this.pt.fadeDuration = 300;
-      this.pt.dynamicLowRes = true;
-      this.pt.lowResScale = 0.25;
+      // Keep navigation clear while the first clean samples accumulate.
+      this.pt.dynamicLowRes = false;
       this.pt.tiles.set(2, 2);
-      this.pt.textureSize.set(512, 512);
+      this.pt.textureSize.set(1024, 1024);
+      this.pt.renderToCanvasCallback = (target, renderer, quad) => {
+        const original = quad.material;
+        const autoClear = renderer.autoClear;
+        this.denoise.map = target.texture;
+        this.denoise.opacity = original.opacity;
+        this.denoise.blending = original.blending;
+        // Ease filtering as the image converges, preserving the fine material detail.
+        this.denoise.sigma = this.samples < 64 ? 2 : 1.2;
+        this.denoise.threshold = 0.12 / Math.sqrt(Math.max(1, this.samples / 16)) / Math.max(0.25, renderer.toneMappingExposure);
+        quad.material = this.denoise;
+        renderer.autoClear = false;
+        try {
+          quad.render(renderer);
+        } finally {
+          quad.material = original;
+          renderer.autoClear = autoClear;
+        }
+      };
       try {
         this.worker = new ParallelMeshBVHWorker();
         this.pt.setBVHWorker(this.worker);

@@ -218,13 +218,13 @@ function swingSign(dir: [number, number], swing: [number, number]): 1 | -1 {
  * hung: 'side' (default) swings about a vertical jamb; 'top' (awning) is hinged at the head – the
  * bottom pushes out and up.
  */
-export function casement(kit: Kit, axis: Axis, c: number, a: number, b: number, y0: number, y1: number, opt: { panes?: number; frame?: string; glass?: string; nOff?: number; movable?: MovableSink; openAngle?: number; open?: boolean[]; hung?: 'side' | 'top'; /** mirror the hinge side(s) */ flip?: boolean } = {}) {
+export function casement(kit: Kit, axis: Axis, c: number, a: number, b: number, y0: number, y1: number, opt: { panes?: number; frame?: string; glass?: string; frameW?: number; sashW?: number; nOff?: number; movable?: MovableSink; openAngle?: number; open?: boolean[]; hung?: 'side' | 'top'; /** mirror the hinge side(s) */ flip?: boolean } = {}) {
   const panes = opt.panes ?? 2;
   const fm = opt.frame ?? 'aluWhite';
   const gm = opt.glass ?? 'glass';
   const n0 = opt.nOff ?? 0;
   const out = n0 < 0 ? -1 : 1;
-  const f = 0.045, dd = 0.05;
+  const f = opt.frameW ?? 0.045, dd = 0.05;
   // outer frame
   lbox(kit, axis, c, a, a + f, y0, y1, n0 - dd, n0 + dd, fm);
   lbox(kit, axis, c, b - f, b, y0, y1, n0 - dd, n0 + dd, fm);
@@ -236,7 +236,7 @@ export function casement(kit: Kit, axis: Axis, c: number, a: number, b: number, 
     const s0 = a + f + i * pw, s1 = s0 + pw;
     if (i > 0) lbox(kit, axis, c, s0 - 0.02, s0 + 0.02, y0 + f, y1 - f, n0 - dd, n0 + dd, fm);
     // sash
-    const sf = 0.035, sd = 0.03;
+    const sf = opt.sashW ?? 0.035, sd = 0.03;
     const q0 = s0 + (i > 0 ? 0.02 : 0), q1 = s1 - (i < panes - 1 ? 0.02 : 0);
     const hingeAtB = (i > 0 && i === panes - 1) !== !!opt.flip; // pairs open from the middle; flip mirrors
     const sash = (k: Kit) => {
@@ -467,7 +467,7 @@ export function basin(kit: Kit, x: number, y: number, z: number, rotY: number) {
   kit.geom(new THREE.CylinderGeometry(0.016, 0.016, 0.18, 10), 'chrome', at(new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, -0.45, 0.11)));
 }
 
-export function shower(kit: Kit, x: number, y: number, z: number, rotY: number) {
+export function shower(kit: Kit, x: number, y: number, z: number, rotY: number, options: { waterTap?: boolean } = {}) {
   const M = placed(x, y, z, rotY);
   const at = (m: THREE.Matrix4) => new THREE.Matrix4().multiplyMatrices(M, m);
   // arm from wall + head
@@ -476,8 +476,9 @@ export function shower(kit: Kit, x: number, y: number, z: number, rotY: number) 
   // mixer
   kit.geom(new THREE.CylinderGeometry(0.035, 0.035, 0.02, 20), 'chrome', at(new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0, 1.05, 0.01)));
   kit.geom(new THREE.BoxGeometry(0.012, 0.012, 0.08), 'chrome', at(new THREE.Matrix4().setPosition(0, 1.05, 0.05)));
-  // wall tap low
-  kit.geom(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 8), 'chrome', at(new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0.25, 0.55, 0.03)));
+  if (options.waterTap !== false) {
+    kit.geom(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 8), 'chrome', at(new THREE.Matrix4().makeRotationX(Math.PI / 2).setPosition(0.25, 0.55, 0.03)));
+  }
 }
 
 export function floorTrap(kit: Kit, x: number, y: number, z: number) {

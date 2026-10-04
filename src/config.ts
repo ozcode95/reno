@@ -17,6 +17,10 @@ export const T_INT = 0.12; // internal brick wall thickness
 // Z lines
 export const Z_REAR = 0;
 export const Z_FRONT = 11.74; // ground floor front wall (plan: 11740)
+// Raised picture window with a narrow, outward-opening right casement in the renovation.
+export const LIVING_WINDOW = { a: 3.15, b: 5.5, y0: 1.05, y1: 2.5, openingWidth: 0.65, frameWidth: 0.035 } as const;
+// Raised L-shaped lounge sofa; the chaise follows the east wall, clear of the entrance passage.
+export const LIVING_SOFA = { z: 7.6, width: 2.1, depth: 0.94, chaiseDepth: 1.85, legHeight: 0.18 } as const;
 export const Z_BATH_FRONT = 12.19; // first floor bath projection (plan: 12190)
 export const Z_LOT_REAR = -2.66;
 // Renovated bedroom's rear wall (shared with the relocated bathroom) sits under the ceiling beam left
@@ -25,7 +29,29 @@ export const Z_RENOVATED_BED4_REAR = -0.1 + 0.12 / 2;
 export const RENOVATED_REAR_DOOR = { a: 2.65, b: 3.52 };
 // Renovated kitchen window: two-panel slider over the sink, west of the rear wall cabinet.
 export const RENOVATED_KITCHEN_WINDOW = { a: 3.72, b: 4.92, y0: 1.1, y1: 2.55 };
+// Relocated ground-floor bathroom: shower and WC face east from the west wall;
+// the basin and its faucet are on the rear wall.
+export const RENOVATED_BATH3 = {
+  westX: T_PARTY / 2 + 0.008,
+  showerZ: Z_RENOVATED_BED4_REAR - 0.72,
+  toiletZ: -1.72,
+  basinX: 0.75,
+  rearZ: Z_LOT_REAR + 0.108,
+} as const;
+// Alternative renovation layouts: shared positions for walls, doors, furniture and labels.
+export const KITCHEN_PARTITION = { z: 1.6, a: 3.42, b: 5.8, height: 2.35 };
+export const MASTER_PARTITION = { z: 12.15, a: 2.72, b: 3.66, height: 2.1 };
+export const GUEST_ENSUITE_DOOR = { a: 0.35, b: 1.25, height: 2.1 };
 export const Z_LOT_FRONT = 18.7; // 70 ft lot
+// Square land base centered on the property, with clearance beyond both ends of the lot.
+export const SITE_CONTEXT = {
+  margin: 2.2,
+  drainWidth: 0.65,
+  drainWall: 0.1,
+  frontDrainOffset: 0.05,
+  rearDrainOffset: 0.1,
+  frontPavementWidth: 0.5,
+} as const;
 export const Z_BALCONY_FRONT = 16.45;
 export const Z_BALCONY_NOTCH = 15.02;
 // Front wall centre: 100 mm clear of the balcony return pillar's rear face.
@@ -55,6 +81,8 @@ export const Y_ROAD = -0.35;
  */
 export const Y_STEP = -0.15; // top of the first (full-width) step
 export const Z_STEP = 12.28; // front edge of the first step
+// Rectangular outdoor format based on Niro Granite's Murale range; thickness and grout are model choices.
+export const PORCH_TILES = { size: [0.6, 0.3], thickness: 0.02, grout: 0.004 } as const;
 export const X_PILLAR_E = 5.6; // west face of the pillar at the east end of the façade
 export const Z_BATH_BOX = 12.29; // front face of the first-floor bathroom projection
 export const Y_PORCH_CEIL = 3.35; // porch ceiling (balcony slab soffit)
@@ -66,6 +94,31 @@ export const X_DOOR_A = 0.9;
 export const X_DOOR_B = 2.4;
 export const Y_YARD = -0.1;
 export const Y_BALCONY = Y_FF - 0.05;
+
+// Shared extension-roof dimensions keep the balcony canopy on the same roof plane.
+export const EXTENSION_ROOF = { eaveRise: 0.09, wallRise: 0.27 } as const;
+export const MASTER_EXTENSION_ROOF = {
+  back: Z_FRONT - 0.1,
+  front: Z_MASTER_EXTENSION_FRONT + 0.25,
+  ceiling: Y_FF_CEIL + 0.15,
+  eastOverhang: 0.12,
+} as const;
+const balconySlope = (EXTENSION_ROOF.wallRise - EXTENSION_ROOF.eaveRise)
+  / (MASTER_EXTENSION_ROOF.front - MASTER_EXTENSION_ROOF.back);
+const awningPanelThickness = 0.016;
+
+// Both renovation canopies admit daylight through opal polycarbonate panels.
+export const AWNINGS = {
+  frameWidth: 0.055,
+  frameDepth: 0.1,
+  panelWidth: 0.8,
+  panelThickness: awningPanelThickness,
+  porch: { back: Z_MASTER_EXTENSION_FRONT + T_EXT / 2, front: Z_LOT_FRONT - 0.12,
+    high: Y_PORCH_CEIL, slope: Math.tan(5 * Math.PI / 180) },
+  balcony: { back: Z_BATH_BOX, front: Z_BALCONY_FRONT + 0.07, slope: balconySlope,
+    high: MASTER_EXTENSION_ROOF.ceiling + EXTENSION_ROOF.wallRise
+      - (Z_BATH_BOX - MASTER_EXTENSION_ROOF.back) * balconySlope - awningPanelThickness },
+} as const;
 
 // Roof
 export const ROOF_PITCH = 27 * (Math.PI / 180);
@@ -122,6 +175,12 @@ export const X_KITCHEN_OPEN_E = 4.3; // dining -> kitchen opening
 export const X_STAIR_TOP = 2.76; // top riser of flight 3 = first-floor slab edge (plan)
 export const X_BATH_W = 3.94; // first floor bathrooms west wall
 export const Z_BATH_SPLIT = 9.63;
+
+// Renovated ensuite windows share the outside wall; the master-facing return stays solid.
+export const BATH1_WINDOWS = [
+  { a: 4.35, b: 4.9, y0: Y_FF + 1.85, y1: Y_FF + 2.35 },
+  { a: 5.15, b: 5.7, y0: Y_FF + 1.85, y1: Y_FF + 2.35 },
+];
 
 export interface RoomInfo {
   id: string;

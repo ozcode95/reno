@@ -1,23 +1,42 @@
 import * as THREE from 'three';
-import { ROOMS, Z_MASTER_EXTENSION_FRONT, Z_RENOVATED_BED4_REAR, type RoomInfo } from '../config';
+import { ROOMS, W, T_INT, Z_STAIR_N, Z_LIVING_N, X_STAIR_E, X_BATH_W, Y_FF, Z_LOT_REAR, KITCHEN_PARTITION, MASTER_PARTITION, Z_MASTER_EXTENSION_FRONT, Z_RENOVATED_BED4_REAR, type RoomInfo } from '../config';
 import { canvasToTexture } from '../builder/textures';
 import { fmtLen, type Units } from './measure';
+import { ORIGINAL_HOUSE, type RenovationLayout } from '../designs';
 
 const INK = '#1d2a36';
 
-/** room list with the renovation's changed rooms (also used by the feng shui overlay) */
-export function roomsFor(renovated: boolean): RoomInfo[] {
-  return ROOMS.map((original) => {
+/** room list with the renovation's changed rooms */
+export function roomsFor(renovation: RenovationLayout): RoomInfo[] {
+  const hi = T_INT / 2;
+  const rooms = ROOMS.map((original) => {
     const r: RoomInfo = { ...original };
-    if (renovated) {
-      if (r.id === 'master') r.z1 = Z_MASTER_EXTENSION_FRONT - 0.1;
+    if (renovation.groundFloor) {
       if (r.id === 'bed4') r.z0 = Z_RENOVATED_BED4_REAR + 0.06;
-      if (r.id === 'bath3') Object.assign(r, { x0: 0.05, x1: 1.84, z0: -2.56, z1: Z_RENOVATED_BED4_REAR - 0.06, y: 0.006 });
-      if (r.id === 'yard') Object.assign(r, { name: 'Rear extension', malay: 'Dapur basah', level: 'gf', x0: 1.96, z1: Z_RENOVATED_BED4_REAR - 0.06, y: 0 });
+      if (r.id === 'bath3') Object.assign(r, { x0: 0.05, x1: 1.84, z0: -2.56, z1: Z_RENOVATED_BED4_REAR - 0.06, y: 0 });
+      if (r.id === 'yard') Object.assign(r, { name: 'Laundry & entry', malay: 'Dobi', level: 'gf', x0: 1.96, x1: 3.1 + hi, z1: Z_RENOVATED_BED4_REAR - hi, y: 0 });
+      if (r.id === 'kitchen') Object.assign(r, { name: renovation.kitchen === 'enclosed' ? 'Enclosed kitchen' : 'Open kitchen',
+        z0: Z_LOT_REAR + 0.1, z1: KITCHEN_PARTITION.z - hi, labelOffset: [0, 0] });
+      if (r.id === 'dining') Object.assign(r, { z0: KITCHEN_PARTITION.z + hi, z1: Z_STAIR_N - hi, labelOffset: [0, 0] });
+      if (renovation.bathroomAccess === 'ensuite') {
+        if (r.id === 'bed4') Object.assign(r, { name: 'Guest bedroom', malay: 'Bilik Tetamu' });
+        if (r.id === 'bath3') Object.assign(r, { name: 'Guest ensuite', malay: 'Bilik Mandi Tetamu' });
+      }
+    }
+    if (renovation.masterExtension) {
+      if (r.id === 'master') r.z1 = renovation.masterZone === 'open' ? Z_MASTER_EXTENSION_FRONT - 0.1 : MASTER_PARTITION.z - hi;
       if (r.id === 'balcony') Object.assign(r, { x0: 3.88, z0: 12.29, labelOffset: [0, 0] });
     }
     return r;
   });
+  if (renovation.groundFloor) rooms.push({ id: 'passage', name: 'Family passage', malay: 'Laluan', level: 'gf',
+    x0: X_STAIR_E, x1: W - 0.05, z0: Z_STAIR_N + hi, z1: Z_LIVING_N - hi, y: 0 });
+  if (renovation.masterExtension && renovation.masterZone !== 'open') rooms.push({
+    id: renovation.masterZone, name: renovation.masterZone === 'study' ? 'Study' : 'Dressing room',
+    malay: renovation.masterZone === 'study' ? 'Bilik Belajar' : 'Bilik Persalinan', level: 'ff',
+    x0: 0.05, x1: X_BATH_W - hi, z0: MASTER_PARTITION.z + hi, z1: Z_MASTER_EXTENSION_FRONT - 0.1, y: Y_FF,
+  });
+  return rooms;
 }
 
 function labelTexture(room: RoomInfo, units: Units) {
@@ -74,7 +93,7 @@ export class Annotations {
   root = new THREE.Group();
   private inkMat = new THREE.MeshBasicMaterial({ color: INK, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   units: Units = 'metric';
-  renovated = false;
+  renovation: RenovationLayout = ORIGINAL_HOUSE;
   private arrowGeo = (() => {
     const s = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(-0.15, 0.05), new THREE.Vector2(-0.15, -0.05)]);
     const g = new THREE.ShapeGeometry(s);
@@ -102,7 +121,7 @@ export class Annotations {
         }
       }
     }
-    for (const r of roomsFor(this.renovated)) this.addRoom(r);
+    for (const r of roomsFor(this.renovation)) this.addRoom(r);
   }
 
   private flat(tex: THREE.Texture, w: number, h: number, x: number, y: number, z: number, rotZ = 0) {

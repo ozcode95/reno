@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 
 export class Post {
   composer: EffectComposer;
@@ -12,17 +13,17 @@ export class Post {
   aoEnabled = true;
 
   constructor(private renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
-    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    const size = renderer.getSize(new THREE.Vector2());
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: Math.min(4, renderer.capabilities.maxSamples) });
     this.composer = new EffectComposer(renderer, rt);
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
 
     this.gtao = new GTAOPass(scene, camera, size.x, size.y);
     this.gtao.output = GTAOPass.OUTPUT.Default;
-    this.gtao.blendIntensity = 0.9;
-    this.gtao.updateGtaoMaterial({ radius: 0.55, distanceExponent: 1.6, thickness: 1.4, scale: 1.15, samples: 16, distanceFallOff: 1.0 });
-    this.gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 5, rings: 2, samples: 16 });
+    this.gtao.blendIntensity = 0.8;
+    this.gtao.updateGtaoMaterial({ radius: 0.4, distanceExponent: 1.8, thickness: 0.8, scale: 1, samples: 32, distanceFallOff: 1.0 });
+    this.gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 3, samples: 24 });
     // keep glass, helpers & annotations out of the AO G-buffer
     const pass = this.gtao as unknown as { _overrideVisibility: () => void; _visibilityCache: THREE.Object3D[] };
     pass._overrideVisibility = function () {
@@ -41,6 +42,8 @@ export class Post {
     this.composer.addPass(this.gtao);
     this.output = new OutputPass();
     this.composer.addPass(this.output);
+    // Smooth the final image too: the AO pass has its own non-MSAA depth/normal buffer.
+    this.composer.addPass(new SMAAPass());
   }
 
   setCamera(camera: THREE.PerspectiveCamera) {

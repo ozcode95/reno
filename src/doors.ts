@@ -21,11 +21,14 @@ export interface MovableSpec extends MovablePart {
   id: string;
   label: string;
   level?: 'gf' | 'ff' | 'site';
+  /** Second panel on a vertical folding hinge, built in closed world coordinates. */
+  fold?: { pivot: [number, number]; angle: number; build: (kit: Kit) => void };
 }
 
 export interface Movable {
   spec: MovableSpec;
   pivot: THREE.Group;
+  foldPivot?: THREE.Group;
   open: boolean;
   /** hinge: 0 = closed … 1 = open. slide: progress of the current move from `from` to `goal` */
   t: number;
@@ -69,12 +72,17 @@ export class Openables {
 
   constructor(private getMat: (key: string) => THREE.Material, private casts: (key: string) => boolean) {}
 
-  add(spec: MovableSpec): Movable {
+  private buildPart(id: string, build: (kit: Kit) => void): THREE.Group {
     const kit = new Kit();
     kit.group = 'part';
-    spec.build(kit);
+    build(kit);
     const g = kit.build(this.getMat, this.casts).get('part') ?? new THREE.Group();
-    g.name = `openable-part:${spec.id}`;
+    g.name = `openable-part:${id}`;
+    return g;
+  }
+
+  add(spec: MovableSpec): Movable {
+    const g = this.buildPart(spec.id, spec.build);
     const pivot = new THREE.Group();
     pivot.name = `openable:${spec.id}`;
     // geometry is in world coordinates; the pivot sits on the hinge axis (or at the origin for sliders)
@@ -83,8 +91,19 @@ export class Openables {
     pivot.position.set(p[0], py, p[1]);
     g.position.set(-p[0], -py, -p[1]);
     pivot.add(g);
+    let foldPivot: THREE.Group | undefined;
+    if (spec.kind === 'hinge' && spec.fold) {
+      const [fx, fz] = spec.fold.pivot;
+      foldPivot = new THREE.Group();
+      foldPivot.name = `openable-fold:${spec.id}`;
+      foldPivot.position.set(fx - p[0], 0, fz - p[1]);
+      const folded = this.buildPart(`${spec.id}:fold`, spec.fold.build);
+      folded.position.set(-fx, -py, -fz);
+      foldPivot.add(folded);
+      pivot.add(foldPivot);
+    }
     const meshes: THREE.Mesh[] = [];
-    g.traverse((o) => {
+    pivot.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh) {
         m.userData.openable = spec.id;
@@ -93,7 +112,7 @@ export class Openables {
     });
     const open = spec.open ?? false;
     const off: [number, number] = spec.kind === 'slide' && open && !spec.group ? spec.offset ?? [0, 0] : [0, 0];
-    const leaf: Movable = { spec, pivot, open, t: spec.kind === 'hinge' ? (open ? 1 : 0) : 1, meshes, from: off, goal: off, dur: 1 };
+    const leaf: Movable = { spec, pivot, foldPivot, open, t: spec.kind === 'hinge' ? (open ? 1 : 0) : 1, meshes, from: off, goal: off, dur: 1 };
     if (spec.group) {
       let g = this.groups.get(spec.group);
       if (!g) this.groups.set(spec.group, (g = { parts: [], stage: 0, stages: 0, dir: 1 }));
@@ -185,7 +204,11 @@ export class Openables {
   }
 
   private pose(l: Movable) {
-    if (l.spec.kind === 'hinge') l.pivot.rotation[l.spec.rotAxis ?? 'y'] = (l.spec.angle ?? 0) * ease(l.t);
+    if (l.spec.kind === 'hinge') {
+      const progress = ease(l.t);
+      l.pivot.rotation[l.spec.rotAxis ?? 'y'] = (l.spec.angle ?? 0) * progress;
+      if (l.foldPivot && l.spec.fold) l.foldPivot.rotation.y = l.spec.fold.angle * progress;
+    }
     else {
       const o = this.slidePos(l);
       l.pivot.position.set(o[0], 0, o[1]);

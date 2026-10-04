@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { W, T_PARTY } from '../config';
-import { plasterTexture, roofTileTexture, tileTexture, woodTexture, canvasToTexture, type TexSet } from './textures';
+import { AWNINGS, PORCH_TILES, W, T_PARTY } from '../config';
+import { INTERIOR_STYLES, finishKey } from '../designs';
+import { plasterTexture, roofTileTexture, tileTexture, woodTexture, linenTexture, stoneTexture, canvasToTexture, type TexSet } from './textures';
 
-type AnyMat = THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial;
+type AnyMat = (THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial) & { castShadow?: boolean };
 
 interface Entry {
   mat: AnyMat;
@@ -85,11 +86,13 @@ async function loadSet(loader: THREE.TextureLoader, name: string, size: [number,
 }
 
 export const INTERIOR_KEYS = [
+  'modernFloor', 'modernStone', 'modernPlaster', 'modernBronze', 'modernLinen', 'coffeeTableOak',
   'wallInt', 'ceiling', 'floorTile', 'stairTile', 'bathWall', 'bathWallDark', 'bathFloor', 'kitchenTile',
   'cabinet', 'worktop', 'doorWood', 'doorBath', 'ceramic', 'chrome', 'stainless', 'plasticWhite', 'steelRail', 'frameSage',
   // interior design (日式简约风)
   'jpOak', 'jpOakDark', 'jpLinen', 'jpLinenGrey', 'jpCushion', 'jpTatami', 'jpHeri', 'jpRug', 'jpWashi', 'jpLED',
   'jpLacquer', 'jpGold', 'jpBrass', 'jpIncense', 'jpOrange', 'jpAltarRed', 'jpAltarPlaque', 'jpTudiPlaque',
+  ...INTERIOR_STYLES.flatMap((style) => Object.keys(style.finishes).map((key) => finishKey(style.id, key))),
 ];
 
 /**
@@ -97,7 +100,7 @@ export const INTERIOR_KEYS = [
  * Porch walls & soffits are NOT in this list: they share the sky lighting of the other exterior
  * walls, so all the white paint reads as the same white.
  */
-export const PORCH_KEYS = ['concretePorch', 'doorMain', 'plasticGrey', 'concreteLight'];
+export const PORCH_KEYS = ['concretePorch', 'porchTile', 'doorMain', 'plasticGrey', 'concreteLight'];
 
 export class MaterialLib {
   private entries = new Map<string, Entry>();
@@ -142,6 +145,9 @@ export class MaterialLib {
   private add(key: string, mat: AnyMat, env = 1, cast = true) {
     mat.name = key;
     mat.envMapIntensity = env;
+    // The path tracer reads this flag from the material, whereas raster shadows
+    // read it from the mesh. Keep glass and lamp shades open to direct light in both.
+    mat.castShadow = cast;
     this.entries.set(key, { mat, cast, env });
     return mat;
   }
@@ -177,6 +183,18 @@ export class MaterialLib {
       base: '#cdc4b6', grout_c: '#a89e90', tileVar: 0.03, cloud: 0.06, cloudScale: 5, speckle: 0.03,
       roughTile: 0.09, roughGrout: 0.75, bevel: 0.0015, normalStrength: 3, seed: 3,
     });
+    // Dark grey 300 x 600 mm outdoor tiles in a half-offset brick layout.
+    const porchTiles = tileTexture({
+      px: 1024, meters: [PORCH_TILES.size[0] * 4, PORCH_TILES.size[1] * 8],
+      tile: [...PORCH_TILES.size], grout: PORCH_TILES.grout, stagger: true,
+      base: '#565c60', grout_c: '#353b3f', tileVar: 0.035, cloud: 0.07, cloudScale: 8, speckle: 0.07,
+      roughTile: 0.86, roughGrout: 0.95, bevel: 0.0015, surfaceRelief: 0.05, normalStrength: 2.5, seed: 57,
+    });
+    const modernFloor = tileTexture({
+      px: 1024, meters: [2.4, 2.4], tile: [1.2, 1.2], grout: 0.002,
+      base: '#d7cfc0', grout_c: '#c8bead', tileVar: 0.012, cloud: 0.025, cloudScale: 6, speckle: 0.012,
+      roughTile: 0.65, roughGrout: 0.8, bevel: 0.0006, normalStrength: 1, seed: 43,
+    });
     const bathWall = tileTexture({
       px: 1024, meters: [1.2, 1.2], tile: [0.6, 0.3], grout: 0.002,
       base: '#dcdcd7', grout_c: '#c9c9c4', tileVar: 0.02, cloud: 0.035, cloudScale: 8, speckle: 0.05,
@@ -211,8 +229,11 @@ export class MaterialLib {
     const woodOak = woodTexture({ px: 512, meters: [0.9, 2.2], base: '#b89570', dark: '#8e6c4b', grain: 0.55, seed: 63, rough: 0.45 });
     const plaster = plasterTexture(512, 5, 0.9);
     // interior design: pale ash / oak and a dark walnut accent
-    const woodPale = woodTexture({ px: 512, meters: [0.8, 2.0], base: '#d6b98f', dark: '#b39164', grain: 0.4, seed: 71, rough: 0.5 });
-    const woodDark = woodTexture({ px: 256, meters: [0.8, 2.0], base: '#6b4b33', dark: '#4a3122', grain: 0.45, seed: 72, rough: 0.45 });
+    const woodPale = woodTexture({ px: 1024, meters: [0.8, 2.0], base: '#d6b98f', dark: '#b39164', grain: 0.4, seed: 71, rough: 0.5 });
+    const woodDark = woodTexture({ px: 512, meters: [0.8, 2.0], base: '#6b4b33', dark: '#4a3122', grain: 0.45, seed: 72, rough: 0.45 });
+    await progress('Weaving linen & finishing stone…');
+    const linen = linenTexture();
+    const stone = stoneTexture();
 
     const S = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(p);
     const P = (p: THREE.MeshPhysicalMaterialParameters) => new THREE.MeshPhysicalMaterial(p);
@@ -237,10 +258,21 @@ export class MaterialLib {
     this.add('fascia', S({ color: '#d9dcdc', roughness: 0.55 }), 1);
 
     // --- floors
+    m = this.add('modernFloor', S({ color: '#ffffff', roughness: 1 }), 0.6);
+    applyTex(m, modernFloor, { origin: [W - T_PARTY / 2, 0] });
+    m = this.add('modernStone', S({ color: '#ded3bd', roughness: 1 }), 0.6);
+    applyTex(m, stone, { normalScale: 0.35 });
+    m = this.add('modernPlaster', S({ color: '#f3eee4', roughness: 0.95 }), 1);
+    applyTex(m, plaster, { map: false, rough: false, normalScale: 0.12 });
+    this.add('modernBronze', S({ color: '#484139', roughness: 0.48, metalness: 0.6 }), 0.8);
+    m = this.add('modernLinen', P({ color: '#e9e0cf', roughness: 1, sheen: 0.55, sheenColor: '#fff7e9', sheenRoughness: 0.85 }), 0.7);
+    applyTex(m, linen, { normalScale: 0.45 });
     m = this.add('floorTile', P({ color: '#ffffff', roughness: 1, specularIntensity: 0.9 }), 0.6);
     // 600 x 600 porcelain laid from the right (east) wall: grout lines at x = inner east wall face - n * 0.6
     // (lot 20 ft = 6.096 m between party-wall centres, so the cut row ends up against the west wall)
     applyTex(m, floor600, { origin: [W - T_PARTY / 2, 0] });
+    m = this.add('porchTile', S({ color: '#ffffff', roughness: 1 }), 1.1);
+    applyTex(m, porchTiles, { origin: [W - T_PARTY / 2, 0] });
     // same porcelain on the stair, but laid tread by tread (UVs set per tread / riser by the stair builder)
     m = this.add('stairTile', P({ color: '#ffffff', roughness: 1, specularIntensity: 0.9 }), 0.6);
     applyTex(m, floor600);
@@ -272,13 +304,17 @@ export class MaterialLib {
     m = this.add('roofTile', S({ color: '#ffffff', roughness: 1 }), 1);
     applyTex(m, roof);
     this.add('roofRidge', S({ color: '#4c5157', roughness: 0.62 }), 1);
+    this.add('awningFrame', S({ color: '#484b49', roughness: 0.48, metalness: 0.65 }), 1);
+    // Opal solar-control polycarbonate: daylight passes through in raster and photoreal views.
+    this.add('awningDaylight', P({ color: '#f3f1e7', roughness: 0.28, transmission: 0.72,
+      thickness: AWNINGS.panelThickness, ior: 1.58 }), 1, false);
 
     // --- joinery
-    m = this.add('doorWood', P({ color: '#ffffff', roughness: 0.38, clearcoat: 0.3, clearcoatRoughness: 0.4 }), 0.5);
+    m = this.add('doorWood', P({ color: '#ffffff', roughness: 1, clearcoat: 0.3, clearcoatRoughness: 0.4 }), 0.5);
     applyTex(m, woodRed);
-    m = this.add('doorMain', P({ color: '#ffffff', roughness: 0.32, clearcoat: 0.4, clearcoatRoughness: 0.35 }), 0.8);
+    m = this.add('doorMain', P({ color: '#ffffff', roughness: 1, clearcoat: 0.4, clearcoatRoughness: 0.35 }), 0.8);
     applyTex(m, woodMain);
-    m = this.add('doorBath', S({ color: '#ffffff', roughness: 0.45 }), 0.5);
+    m = this.add('doorBath', S({ color: '#ffffff', roughness: 1 }), 0.5);
     applyTex(m, woodOak);
     this.add('doorRear', S({ color: '#a6ada9', roughness: 0.38, metalness: 0.7 }), 0.6);
     this.add('frameSage', S({ color: '#86998f', roughness: 0.45, metalness: 0.2 }), 0.6);
@@ -286,16 +322,21 @@ export class MaterialLib {
     this.add('cabinet', S({ color: '#ecebe6', roughness: 0.5 }), 0.5);
     this.add('worktop', P({ color: '#2f3133', roughness: 0.3, clearcoat: 0.5, clearcoatRoughness: 0.2 }), 0.6);
     // --- interior design: 日式简约风 (Japanese minimalist) furniture
-    m = this.add('jpOak', P({ color: '#ffffff', roughness: 0.55, clearcoat: 0.12, clearcoatRoughness: 0.6 }), 0.5);
-    applyTex(m, woodPale, { normal: false });
-    m = this.add('jpOakDark', S({ color: '#ffffff', roughness: 0.5 }), 0.5);
-    applyTex(m, woodDark, { normal: false });
+    m = this.add('jpOak', P({ color: '#ffffff', roughness: 1, clearcoat: 0.12, clearcoatRoughness: 0.6 }), 0.5);
+    applyTex(m, woodPale, { normalScale: 0.3 });
+    // Retain natural timber on the rolling table in every interior palette.
+    this.add('coffeeTableOak', m.clone(), 0.5);
+    m = this.add('jpOakDark', S({ color: '#ffffff', roughness: 1 }), 0.5);
+    applyTex(m, woodDark, { normalScale: 0.3 });
     this.add('jpLinen', P({ color: '#eee8dc', roughness: 0.92, sheen: 0.4, sheenColor: '#ffffff', sheenRoughness: 0.8 }), 0.5);
     this.add('jpLinenGrey', P({ color: '#b9b2a6', roughness: 0.95, sheen: 0.4, sheenColor: '#ffffff', sheenRoughness: 0.8 }), 0.5);
     this.add('jpCushion', P({ color: '#8c9179', roughness: 0.95, sheen: 0.3, sheenColor: '#e8ecd8', sheenRoughness: 0.8 }), 0.5);
     this.add('jpTatami', S({ color: '#cbbf8a', roughness: 0.85 }), 0.5);
     this.add('jpHeri', S({ color: '#2d3440', roughness: 0.8 }), 0.5);
     this.add('jpRug', S({ color: '#ddd5c5', roughness: 1 }), 0.5);
+    for (const key of ['jpLinen', 'jpLinenGrey', 'jpCushion', 'jpRug']) {
+      applyTex(this.get(key) as AnyMat, linen, { normalScale: key === 'jpRug' ? 0.65 : 0.4 });
+    }
     // lamp surfaces: washi paper shades and LED fittings. Their glow follows the lights
     // (setLampLevel): plain paper by day, lit at night. They don't block the sun's shadow map.
     this.add('jpWashi', S({ color: '#f5efe2', roughness: 0.9, emissive: '#ffd09a', emissiveIntensity: 0 }), 0.5, false);
@@ -310,6 +351,18 @@ export class MaterialLib {
     const plaqueMat = (c: HTMLCanvasElement) => S({ map: canvasToTexture(c), roughness: 0.35, metalness: 0.1 });
     this.add('jpAltarPlaque', plaqueMat(altarPlaque()), 0.5);
     this.add('jpTudiPlaque', plaqueMat(tudiPlaque()), 0.5);
+    // Reuse the surface maps and geometry; each palette has its own matte materials.
+    for (const style of INTERIOR_STYLES) {
+      for (const [key, finish] of Object.entries(style.finishes)) {
+        const source = this.entries.get(key)!;
+        const material = source.mat.clone();
+        material.color.set(finish.color);
+        if (!finish.woodGrain) material.map = null;
+        material.roughness = 0.9;
+        if (material instanceof THREE.MeshPhysicalMaterial) material.clearcoat = 0;
+        this.add(finishKey(style.id, key), material, source.env, source.cast);
+      }
+    }
     this.add('aluWhite', S({ color: '#efefec', roughness: 0.35, metalness: 0.1 }), 0.8);
     this.add('aluSilver', S({ color: '#c3c6c7', roughness: 0.3, metalness: 0.85 }), 0.9);
 
@@ -318,6 +371,8 @@ export class MaterialLib {
       P({ color, roughness: rough, metalness: 0, transmission: 1, thickness: 0, ior: 1.5, specularIntensity: 1, transparent: false });
     this.add('glass', glass('#eef5f1'), 1, false);
     this.add('glassTint', glass('#bdd8ca', 0.03), 1, false);
+    // Smoke-grey solar-control glazing shades direct sun; photoreal shadow rays retain its tint.
+    this.add('glassSolar', glass('#737b76', 0.03), 1);
     this.add('glassRail', glass('#e6f2ec'), 1, false);
     this.add('glassFrosted', glass('#f1f4f2', 0.35), 1, false);
     this.add('glassDark', P({ color: '#1f2927', roughness: 0.05, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05 }), 1);

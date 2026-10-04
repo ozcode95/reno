@@ -146,6 +146,7 @@ export interface TileOpts {
   roughTile: number;
   roughGrout: number;
   bevel: number;
+  surfaceRelief?: number; // fine stone grain in the normal map, independent of the grout recess
   normalStrength: number;
   seed: number;
   stagger?: boolean;
@@ -183,6 +184,7 @@ export function tileTexture(o: TileOpts): TexSet {
       } else {
         const b = Math.min(1, (edge - g) / Math.max(1e-4, o.bevel));
         height[i] = 0.35 + 0.65 * Math.sin((b * Math.PI) / 2);
+        if (o.surfaceRelief) height[i] += (fine.at(u, v) - 0.5) * o.surfaceRelief;
         const tv = (hash2(col_i, row, o.seed) - 0.5) * 2 * o.tileVar;
         // each tile samples the cloud field with its own offset for natural variation
         const off = hash2(col_i + 17, row + 31, o.seed);
@@ -293,7 +295,77 @@ export function woodTexture(o: { px: number; meters: [number, number]; base: str
     for (let i = 0; i < W * H; i++) { d[i * 4] = col[i * 3]; d[i * 4 + 1] = col[i * 3 + 1]; d[i * 4 + 2] = col[i * 3 + 2]; d[i * 4 + 3] = 255; }
   });
   const nmap = normalFromHeight(h, W, H, o.grooves ? 6 : 1.5);
-  return { map: toTexture(map, true), normalMap: toTexture(nmap, false), size: o.meters };
+  const rmap = canvasFrom(W, H, (d) => {
+    for (let i = 0; i < W * H; i++) {
+      // Open pores scatter highlights more than the sealed face of the timber.
+      const r = Math.min(1, o.rough + (1 - h[i]) * 0.6) * 255;
+      d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = r;
+      d[i * 4 + 3] = 255;
+    }
+  });
+  return { map: toTexture(map, true), normalMap: toTexture(nmap, false), roughnessMap: toTexture(rmap, false), size: o.meters };
+}
+
+/** Plain woven cloth: alternating over/under yarns, with a 2 mm thread spacing. */
+export function linenTexture(px = 512, seed = 81): TexSet {
+  const threads = 32;
+  const yarn = new Fbm(threads, threads, 2, seed);
+  const height = new Float32Array(px * px);
+  for (let y = 0; y < px; y++) for (let x = 0; x < px; x++) {
+    const u = x / px * threads, v = y / px * threads;
+    const warp = Math.sin((u % 1) * Math.PI);
+    const weft = Math.sin((v % 1) * Math.PI);
+    const over = (Math.floor(u) + Math.floor(v)) % 2 === 0;
+    height[y * px + x] = (over ? warp * 0.75 + weft * 0.25 : weft * 0.75 + warp * 0.25)
+      * (0.85 + yarn.at(x / px, y / px) * 0.15);
+  }
+  const grey = (base: number, variation: number) => toTexture(canvasFrom(px, px, (d) => {
+    for (let i = 0; i < height.length; i++) {
+      const value = base + height[i] * variation;
+      d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = value;
+      d[i * 4 + 3] = 255;
+    }
+  }), false);
+  const map = grey(225, 30);
+  map.colorSpace = THREE.SRGBColorSpace;
+  return {
+    map,
+    normalMap: toTexture(normalFromHeight(height, px, px, 1.1), false),
+    roughnessMap: grey(235, -18),
+    size: [0.064, 0.064],
+  };
+}
+
+/** Honed limestone: quiet mineral clouds and fine pores at a physical metre scale. */
+export function stoneTexture(px = 512, seed = 91): TexSet {
+  const mineral = new Fbm(5, 5, 4, seed);
+  const pores = new Fbm(96, 96, 2, seed + 1);
+  const height = new Float32Array(px * px);
+  const map = canvasFrom(px, px, (d) => {
+    for (let y = 0; y < px; y++) for (let x = 0; x < px; x++) {
+      const i = y * px + x;
+      const cloud = mineral.at(x / px, y / px), pore = pores.at(x / px, y / px);
+      height[i] = pore * 0.65 + cloud * 0.35;
+      const value = 233 + cloud * 18 + pore * 4;
+      d[i * 4] = value;
+      d[i * 4 + 1] = value - 2;
+      d[i * 4 + 2] = value - 5;
+      d[i * 4 + 3] = 255;
+    }
+  });
+  const rough = canvasFrom(px, px, (d) => {
+    for (let i = 0; i < height.length; i++) {
+      const r = (0.62 + height[i] * 0.16) * 255;
+      d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = r;
+      d[i * 4 + 3] = 255;
+    }
+  });
+  return {
+    map: toTexture(map, true),
+    normalMap: toTexture(normalFromHeight(height, px, px, 0.65), false),
+    roughnessMap: toTexture(rough, false),
+    size: [0.8, 0.8],
+  };
 }
 
 /* ------------------------------------------------------------------ */

@@ -81,7 +81,7 @@ export class SkyEnvironment {
     // The previous depth bias shifted shadows by ~21 mm over this camera range.
     s.bias = -0.00002;
     s.normalBias = 0.002;
-    s.radius = 1;
+    s.radius = 2.5;
     this.target.position.copy(this.center);
     scene.add(this.sun, this.target);
     this.sun.target = this.target;

@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import type { Kit } from './kit';
 import type { UnitOpts } from './house';
+import type { RenovationLayout } from '../designs';
 import { wall, skin, casement, slidingDoor, roomSlidingDoor, hingedDoorLeaf, toilet, basin, shower, floorTrap, type MovableSink } from './fixtures';
 import { leafMovable, type MovableSpec } from '../doors';
-import { W, Z_LOT_REAR, Z_RENOVATED_BED4_REAR, RENOVATED_REAR_DOOR, RENOVATED_KITCHEN_WINDOW, Z_FRONT, Z_MASTER_EXTENSION_FRONT, X_BATH_W, Y_FF, Y_FF_CEIL, Y_GF_CEIL } from '../config';
+import { W, T_INT, KITCHEN_PARTITION, MASTER_PARTITION, GUEST_ENSUITE_DOOR, Z_LOT_REAR, Z_RENOVATED_BED4_REAR, RENOVATED_REAR_DOOR, RENOVATED_KITCHEN_WINDOW, RENOVATED_BATH3, Z_FRONT, Z_MASTER_EXTENSION_FRONT, X_BATH_W, Y_FF, Y_BALCONY, Y_FF_CEIL, Y_GF_CEIL, Y_RENOVATED_GF_CEIL, EXTENSION_ROOF, MASTER_EXTENSION_ROOF } from '../config';
 
 type Windows = (id: string, label: string, level: 'gf' | 'ff') => MovableSink | undefined;
 
 /** Original low-profile roof, with the main roof's tile material and scale. */
 function extensionRoof(kit: Kit, x0: number, x1: number, z0: number, z1: number, ceiling: number, dir: 1 | -1) {
   const eaveZ = dir < 0 ? z0 : z1;
-  const low = ceiling + 0.09, high = ceiling + 0.27;
+  const low = ceiling + EXTENSION_ROOF.eaveRise, high = ceiling + EXTENSION_ROOF.wallRise;
   const y0 = dir < 0 ? low : high, y1 = dir < 0 ? high : low;
   const scale = Math.hypot(z1 - z0, high - low) / (z1 - z0);
   const previousUV = kit.uvFn;
@@ -24,7 +25,7 @@ function extensionRoof(kit: Kit, x0: number, x1: number, z0: number, z1: number,
   kit.box(x0, x1, ceiling - 0.03, low, eaveZ - 0.02, eaveZ + 0.02, 'fascia');
 }
 
-export function buildRearExtension(kit: Kit, G: UnitOpts['G'], mv: Windows, parts: MovableSpec[], japaneseLayout = false) {
+export function buildRearExtension(kit: Kit, G: UnitOpts['G'], mv: Windows, parts: MovableSpec[], layout: RenovationLayout) {
   const z = Z_LOT_REAR;
   kit.group = G('gf');
   const window = { a: 0.45, b: 1.45, y0: 1.75, y1: 2.4 };
@@ -34,31 +35,28 @@ export function buildRearExtension(kit: Kit, G: UnitOpts['G'], mv: Windows, part
   ]);
   casement(kit, 'x', z, window.a, window.b, window.y0, window.y1,
     { panes: 2, glass: 'glassFrosted', hung: 'top', movable: mv('win-bath3', 'Relocated bathroom window', 'gf') });
-  wall(kit, 'x', Z_RENOVATED_BED4_REAR, 0.05, 1.96, 0, Y_GF_CEIL, 0.12, 'wallInt', 'bathWall');
-  // Swap the Japanese layout's entrance with the former corridor laundry position.
-  const door = japaneseLayout ? { a: -2.4, b: -1.34 } : { a: -1.35, b: -0.51 };
-  wall(kit, 'z', 1.9, z + 0.1, Z_RENOVATED_BED4_REAR - 0.06, 0, Y_GF_CEIL, 0.12, 'wallInt', 'bathWall', [{ ...door, y0: 0, y1: 2.1 }]);
-  const floorY = japaneseLayout ? 0 : 0.006;
+  const ensuite = layout.bathroomAccess === 'ensuite';
+  const suiteDoor = GUEST_ENSUITE_DOOR;
+  wall(kit, 'x', Z_RENOVATED_BED4_REAR, 0.05, 1.96, 0, Y_GF_CEIL, T_INT, 'wallInt', 'bathWall',
+    ensuite ? [{ a: suiteDoor.a, b: suiteDoor.b, y0: 0, y1: suiteDoor.height }] : []);
+  const door = { a: -2.4, b: -1.34 };
+  wall(kit, 'z', 1.9, z + 0.1, Z_RENOVATED_BED4_REAR - 0.06, 0, Y_GF_CEIL, T_INT, 'wallInt', 'bathWall',
+    ensuite ? [] : [{ ...door, y0: 0, y1: 2.1 }]);
+  const floorY = 0;
   kit.box(0.05, 1.84, -0.3, floorY, z + 0.1, Z_RENOVATED_BED4_REAR - 0.06, 'bathFloor');
-  if (japaneseLayout) {
-    parts.push({ ...roomSlidingDoor(kit, 1.9, door.a, door.b, 1, 'doorBath'), id: 'bath3', label: 'Bathroom 3 sliding door', level: 'gf' });
+  if (ensuite) {
+    const { angle, ...leaf } = hingedDoorLeaf(kit, 'x', Z_RENOVATED_BED4_REAR, T_INT,
+      suiteDoor.a, suiteDoor.b, 0, suiteDoor.height,
+      { hingeAtB: false, openTo: 1, angle: Math.PI / 2, mat: 'doorBath', frameW: 0.035 });
+    parts.push(leafMovable({ ...leaf, id: 'bath3', label: 'Guest ensuite door', level: 'gf', maxAngle: angle }));
   } else {
-  const { angle: _, ...leaf } = hingedDoorLeaf(kit, 'z', 1.9, 0.12, door.a, door.b, 0, 2.1,
-    { hingeAtB: true, openTo: -1, angle: 1.4, mat: 'doorBath', frameW: 0.035 });
-  parts.push(leafMovable({ ...leaf, id: 'bath3', label: 'Relocated bathroom door', level: 'gf', maxAngle: 1.4 }));
+    parts.push({ ...roomSlidingDoor(kit, 1.9, door.a, door.b, 1, 'doorBath'), id: 'bath3', label: 'Shared bathroom sliding door', level: 'gf' });
   }
-  if (japaneseLayout) {
-    // Keep the middle clear for turning; the open shower shares the level floor.
-    basin(kit, 0.45, 0.84, Z_RENOVATED_BED4_REAR - 0.068, Math.PI);
-    toilet(kit, 1.38, floorY, Z_RENOVATED_BED4_REAR - 0.068, Math.PI);
-    shower(kit, 0.28, floorY, z + 0.108, 0);
-    floorTrap(kit, 0.55, floorY, -2.3);
-  } else {
-    basin(kit, 1.968, 0.84, -1.95, Math.PI / 2);
-    toilet(kit, 1.3, 0.006, z + 0.108, 0);
-    shower(kit, 0.058, 0.006, -2.1, Math.PI / 2);
-    floorTrap(kit, 0.55, 0.006, -2.05);
-  }
+  const bath = RENOVATED_BATH3;
+  shower(kit, bath.westX, floorY, bath.showerZ, Math.PI / 2, { waterTap: false });
+  toilet(kit, bath.westX, floorY, bath.toiletZ, Math.PI / 2);
+  basin(kit, bath.basinX, 0.84, bath.rearZ, 0);
+  floorTrap(kit, 0.55, floorY, bath.showerZ - 0.1);
   const kw = RENOVATED_KITCHEN_WINDOW;
   slidingDoor(kit, 'x', z, kw.a, kw.b, kw.y0, kw.y1,
     { panels: 2, glass: 'glass', movable: mv('win-kitchen', 'Kitchen sliding window', 'gf'), group: 'win-kitchen' });
@@ -69,10 +67,32 @@ export function buildRearExtension(kit: Kit, G: UnitOpts['G'], mv: Windows, part
   kit.group = G('gf');
 }
 
+/** Full-height partitions are part of the selected plan, even without furniture. */
+export function buildLayoutPartitions(kit: Kit, G: UnitOpts['G'], mv: Windows, parts: MovableSpec[], layout: RenovationLayout) {
+  if (layout.kitchen === 'enclosed') {
+    kit.group = G('gf');
+    const { z, a, b, height } = KITCHEN_PARTITION;
+    wall(kit, 'x', z, 3.1 + T_INT / 2, W - 0.05, 0, Y_RENOVATED_GF_CEIL, T_INT, 'wallInt', 'wallInt',
+      [{ a, b, y0: 0, y1: height }]);
+    slidingDoor(kit, 'x', z, a, b, 0, height,
+      { panels: 2, glass: 'glass', frame: 'aluWhite', movable: mv('kitchen-divider', 'Kitchen sliding partition', 'gf') });
+  }
+  if (layout.masterExtension && layout.masterZone !== 'open') {
+    kit.group = G('ff');
+    const { z, a, b, height } = MASTER_PARTITION;
+    wall(kit, 'x', z, 0.05, X_BATH_W - T_INT / 2, Y_FF, Y_FF_CEIL, T_INT, 'wallInt', 'wallInt',
+      [{ a, b, y0: Y_FF, y1: Y_FF + height }]);
+    const { angle, ...leaf } = hingedDoorLeaf(kit, 'x', z, T_INT, a, b, Y_FF, height,
+      { hingeAtB: true, openTo: 1, angle: Math.PI / 2, mat: 'doorWood', frameW: 0.035 });
+    parts.push(leafMovable({ ...leaf, id: 'master-zone',
+      label: layout.masterZone === 'study' ? 'Study door' : 'Dressing room door', level: 'ff', maxAngle: angle }));
+  }
+}
+
 export function buildMasterExtension(kit: Kit, G: UnitOpts['G'], mv: Windows) {
   const east = X_BATH_W - 0.06, south = Z_MASTER_EXTENSION_FRONT;
   kit.group = G('slab1');
-  kit.box(0.05, east, Y_FF - 0.05, Y_FF, Z_FRONT - 0.1, south + 0.1, 'floorTile');
+  kit.box(0.05, east, Y_BALCONY, Y_FF, Z_FRONT - 0.1, south + 0.1, 'floorTile');
   kit.group = G('ff');
   const picture = { a: 0.4, b: east - 0.35, y0: Y_FF + 1.375, y1: Y_FF + 2.425 };
   wall(kit, 'x', south, 0.05, east, Y_FF, Y_FF_CEIL, 0.2, 'wallExtGrey', 'wallInt', [picture]);
@@ -87,36 +107,61 @@ export function buildMasterExtension(kit: Kit, G: UnitOpts['G'], mv: Windows) {
   kit.group = G('ceil2');
   kit.box(0.05, east, Y_FF_CEIL, Y_FF_CEIL + 0.15, Z_FRONT - 0.1, south + 0.1, { py: 'concreteLight', rest: 'ceiling' });
   kit.group = G('roof');
-  extensionRoof(kit, 0, east + 0.12, Z_FRONT - 0.1, south + 0.25, Y_FF_CEIL + 0.15, 1);
+  const { back, front, ceiling, eastOverhang } = MASTER_EXTENSION_ROOF;
+  extensionRoof(kit, 0, east + eastOverhang, back, front, ceiling, 1);
   kit.group = G('ff');
 }
 
 export function buildAutoGate(kit: Kit, parts: MovableSpec[]) {
   const z = 18.6, y0 = -0.1, y1 = 1.8;
+  const frame = 0.055, divider = 0.04;
+  const outerMeshWidth = 0.5, centerMeshWidth = 0.4;
+  const foldGap = 0.015, foldOffset = -0.06;
+  const panel = (k: Kit, a: number, b: number, meshAtStart: boolean, meshWidth: number) => {
+    for (const x of [a, b - frame]) k.box(x, x + frame, y0, y1, z - 0.045, z + 0.045, 'railBlack');
+    for (const y of [y0, y1 - frame]) k.box(a, b, y, y + frame, z - 0.045, z + 0.045, 'railBlack');
+    const meshA = meshAtStart ? a + frame : b - frame - meshWidth, meshB = meshA + meshWidth;
+    const dividerX = meshAtStart ? meshB : meshA - divider;
+    const slatA = meshAtStart ? meshB + divider : a + frame;
+    const slatB = meshAtStart ? b - frame : dividerX;
+    const slatWidth = 0.032, slatPitch = 0.055;
+    const slatCount = Math.floor((slatB - slatA + slatPitch - slatWidth) / slatPitch);
+    const slatStart = (slatA + slatB - ((slatCount - 1) * slatPitch + slatWidth)) / 2;
+    for (let i = 0; i < slatCount; i++) {
+      const x = slatStart + i * slatPitch;
+      k.box(x, x + slatWidth, y0 + frame, y1 - frame, z - 0.035, z + 0.035, 'railBlack');
+    }
+    // Fine wire mesh: 20 mm pitch with 3 mm wires (17 mm clear holes).
+    const pitch = 0.02, wire = 0.003;
+    for (let x = meshA; x + wire <= meshB; x += pitch)
+      k.box(x, x + wire, y0 + frame, y1 - frame, z - wire / 2, z + wire / 2, 'railBlack');
+    for (let y = y0 + frame; y + wire <= y1 - frame; y += pitch)
+      k.box(meshA, meshB, y, y + wire, z - wire / 2, z + wire / 2, 'railBlack');
+    k.box(dividerX, dividerX + divider, y0, y1, z - 0.04, z + 0.04, 'railBlack');
+  };
   // The party-wall builder supplies the two outer piers. No centre pillars.
   kit.box(-0.1, 0.1, 1.13, 1.24, 18.75, 18.76, 'plaque45');
   for (const side of [0, 1]) {
     const a = side === 0 ? 0.25 : W / 2 + 0.015;
     const b = side === 0 ? W / 2 - 0.015 : W - 0.25;
-    const hinge = side === 0 ? a : b;
-    parts.push({ id: `auto-gate-${side}`, label: 'Full-width automatic gate', level: 'site', index: side,
-      kind: 'hinge', pivot: [hinge, z], angle: side === 0 ? Math.PI / 2 : -Math.PI / 2,
+    const middle = (a + b) / 2, left = side === 0;
+    const hinge = left ? a + frame / 2 : b - frame / 2;
+    const angle = left ? -Math.PI / 2 : Math.PI / 2;
+    // Keep the operator fixed while the two panels on each side fold together.
+    kit.box(hinge - 0.06, hinge + 0.06, y0, y0 + 0.23, z - 0.19, z - 0.06, 'railBlack');
+    parts.push({ id: `auto-gate-${side}`, label: 'Full-width folding automatic gate', level: 'site', index: side,
+      kind: 'hinge', pivot: [hinge, z], angle,
       build: (k) => {
-        for (const x of [a, b - 0.055]) k.box(x, x + 0.055, y0, y1, z - 0.045, z + 0.045, 'railBlack');
-        for (const y of [y0, y1 - 0.055]) k.box(a, b, y, y + 0.055, z - 0.045, z + 0.045, 'railBlack');
-        const meshA = side === 0 ? a + 0.055 : b - 0.65;
-        const meshB = side === 0 ? a + 0.65 : b - 0.055;
-        for (let x = a + 0.07; x < b - 0.055; x += 0.055) {
-          if (x >= meshA && x <= meshB) continue;
-          k.box(x, x + 0.032, y0 + 0.055, y1 - 0.055, z - 0.035, z + 0.035, 'railBlack');
+        panel(k, left ? a : middle + foldGap / 2, left ? middle - foldGap / 2 : b, left, outerMeshWidth);
+        for (const y of [y0 + 0.2, (y0 + y1) / 2, y1 - 0.2]) {
+          k.rod(new THREE.Vector3(middle, y - 0.045, z + foldOffset),
+            new THREE.Vector3(middle, y + 0.045, z + foldOffset), 0.018, 'railBlack', 12);
         }
-        // Fine wire mesh: 20 mm pitch with 3 mm wires (17 mm clear holes).
-        const pitch = 0.02, wire = 0.003;
-        for (let x = meshA; x + wire <= meshB; x += pitch) k.box(x, x + wire, y0 + 0.055, y1 - 0.055, z - wire / 2, z + wire / 2, 'railBlack');
-        for (let y = y0 + 0.055; y + wire <= y1 - 0.055; y += pitch) k.box(meshA, meshB, y, y + wire, z - wire / 2, z + wire / 2, 'railBlack');
-        const divider = side === 0 ? meshB : meshA;
-        k.box(divider - 0.02, divider + 0.02, y0, y1, z - 0.04, z + 0.04, 'railBlack');
-        k.box(hinge - 0.06, hinge + 0.06, y0, y0 + 0.23, z - 0.19, z - 0.06, 'railBlack');
+      },
+      fold: {
+        // Offset the joint towards the porch so the outward-folded panels have a clear gap.
+        pivot: [middle, z + foldOffset], angle: -2 * angle,
+        build: (k) => panel(k, left ? middle + foldGap / 2 : a, left ? b : middle - foldGap / 2, !left, centerMeshWidth),
       },
     });
   }

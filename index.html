@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>No. 45 — Double-Storey Terrace House (3D)</title>
   </head>
   <body>
@@ -24,18 +24,17 @@
         <!-- chips -->
         <div id="chips">
           <button class="chip" id="btn-menu" title="House info">ℹ️ No. 45</button>
-          <label class="chip select-chip" title="Go to a place in the house">📍 <select id="views"></select></label>
-          <div id="levels" class="chipset">
-            <button class="chip on" data-v="full">🏠 Whole house</button>
-            <button class="chip" data-v="noroof">Remove roof</button>
-            <button class="chip" data-v="gf">Ground floor</button>
-          </div>
-          <button class="chip" id="chip-dims">📐 Dimensions</button>
-          <button class="chip" id="btn-measure">📏 Measure</button>
-          <button class="chip" id="btn-renovation" aria-pressed="false" title="Compare the existing house with the proposed extensions and automatic gate">Structure renovation: Off</button>
-          <label class="chip select-chip disabled" id="chip-interior" title="Interior design is available after the structure renovation is applied">🛋️ <select id="interior" disabled><option value="none">Interior design: Off</option></select></label>
+          <label class="chip select-chip" id="chip-views" title="Go to a place in the house">📍 <select id="views" aria-label="Go to a place in the house"></select></label>
+          <label class="chip select-chip" id="chip-levels" title="Choose which floors to show (1, 2, 3)">🏠
+            <select id="levels" aria-label="House view">
+              <option value="full" selected>Whole house</option>
+              <option value="noroof">Remove roof</option>
+              <option value="gf">Ground floor</option>
+            </select>
+          </label>
+          <button type="button" class="chip on" id="renovation" aria-pressed="true" aria-describedby="renovation-description">Reno</button>
+          <label class="chip select-chip disabled" id="chip-interior" title="Turn on Reno to add an interior design"><span>Interior:</span> <select id="interior" aria-label="Interior design selection" aria-describedby="interior-description" disabled><option value="none">No furniture</option></select></label>
           <button class="chip" id="btn-lights" hidden title="Interior lights: Auto switches them on from sunset to sunrise (follows the sun clock)">💡 Lights: Auto</button>
-          <input type="checkbox" id="chk-dims" hidden />
         </div>
 
         <!-- house info card (opened by the "No. 45" chip) -->
@@ -49,6 +48,18 @@
             <button class="icon close" data-close="info-card" title="Close"><svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg></button>
           </div>
           <div class="card-body">
+            <details class="design-notes" open>
+              <summary>Layout &amp; finishes</summary>
+              <div class="design-notes-body" role="status" aria-live="polite" aria-atomic="true">
+                <p id="renovation-description"></p>
+                <p id="interior-description"></p>
+                <div id="design-swatches"></div>
+              </div>
+              <div class="design-plan-views" aria-label="Floor plan views">
+                <button type="button" class="flat" id="design-plan-gf">Ground-floor plan</button>
+                <button type="button" class="flat" id="design-plan-ff">First-floor plan</button>
+              </div>
+            </details>
             <details open>
               <summary>Key dimensions</summary>
               <table id="specs"></table>
@@ -59,7 +70,8 @@
                 <p><b>Orbit</b>: left-drag rotate · right-drag pan · wheel zoom (to cursor) · double-click to focus · <kbd>W A S D</kbd>/<kbd>Q E</kbd> fly.</p>
                 <p><b>Walk</b>: click to capture mouse · <kbd>W A S D</kbd> move · <kbd>Shift</kbd> run · climbs stairs · <kbd>Esc</kbd> release.</p>
                 <p><b>Doors &amp; windows</b>: click any of them (in walk mode aim the crosshair and click) to open / close.</p>
-                <p><kbd>V</kbd> orbit/walk · <kbd>M</kbd> measure · <kbd>L</kbd> dimensions · <kbd>1 2 3</kbd> levels · <kbd>P</kbd> photoreal · <kbd>F</kbd> feng shui · <kbd>T</kbd> sun &amp; time · <kbd>N</kbd> face north · <kbd>H</kbd> hide UI.</p>
+                <p><b>Coffee table</b>: drag it with the mouse or a finger in Orbit mode to reposition it within the lounge.</p>
+                <p><kbd>V</kbd> orbit/walk · <kbd>M</kbd> measure · <kbd>L</kbd> dimensions · <kbd>1 2 3</kbd> levels · <kbd>P</kbd> photoreal · <kbd>T</kbd> sun &amp; time · <kbd>N</kbd> face north · <kbd>H</kbd> hide UI.</p>
               </div>
             </details>
           </div>
@@ -96,47 +108,6 @@
             <div class="hint-small">Malaysia time (UTC+8) · Kuala Lumpur 3.14° N, 101.69° E · house front faces south.</div>
           </div>
         </div>
-
-        <!-- feng shui: collapsed summary row (grid on/off pill), expands into the advice -->
-        <div id="fs-card" class="card">
-          <div id="fs-summary" class="summary-row" role="button" tabindex="0" title="Feng shui advice">
-            <span class="sun-ico">☯️</span>
-            <span class="sum-text">
-              <span class="sum-main fs-main" data-i18n="title">Feng shui · 风水</span>
-              <span class="sum-sub" data-i18n="subtitle">坎宅 · sits north, faces south · East-group house</span>
-            </span>
-            <button id="btn-fengshui" class="pill" aria-pressed="false" title="Show the feng shui grid on the floors (F)">Grid off</button>
-            <svg class="chev" viewBox="0 0 24 24"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
-          </div>
-          <div class="expand">
-            <div class="fs-top">
-              <div class="hint-small" data-i18n="meta">Eight Mansions (八宅) · 3 × 3 Lo Shu grid on each floor</div>
-              <div class="seg small fs-lang" id="fs-lang"><button data-v="en" class="on">EN</button><button data-v="zh">中文</button></div>
-            </div>
-            <label class="row"><span data-i18n="gridFor">Grid shows stars for</span><select id="fs-for"></select></label>
-            <div id="fs-legend" class="fs-legend"></div>
-            <details open>
-              <summary data-i18n="general">Whole-house layout</summary>
-              <ul id="fs-general" class="fs-list"></ul>
-            </details>
-            <details open>
-              <summary data-i18n="rooms">Room by room</summary>
-              <ul id="fs-rooms" class="fs-list"></ul>
-            </details>
-            <details open>
-              <summary data-i18n="people">Occupants (personal Kua 命卦)</summary>
-              <div class="hint-small" data-i18n="peopleHint">Add the birth date and gender of each person living here to see their lucky directions and best bedroom. Saved in this browser only.</div>
-              <div id="fs-people"></div>
-              <div class="fs-add">
-                <input id="fs-name" type="text" placeholder="Name" />
-                <input id="fs-birth" type="date" />
-                <select id="fs-gender"><option value="m" data-i18n="male">Male</option><option value="f" data-i18n="female">Female</option></select>
-                <button id="fs-add" class="flat" data-i18n="add">Add</button>
-              </div>
-            </details>
-            <div class="hint-small" data-i18n="disclaimer">A traditional reading for reference, not a professional consultation. The house is taken as facing due south. An exact compass bearing, and the build or move-in year for Flying Stars (玄空飞星), would refine it.</div>
-          </div>
-        </div>
       </div>
 
       <!-- ============ measure card ============ -->
@@ -156,9 +127,18 @@
       </div>
 
       <!-- ============ right-hand map controls ============ -->
+      <div id="view-controls">
       <div id="mapctl">
+        <button id="btn-dims" class="fab" title="Room sizes &amp; dimensions (L)" aria-label="Room sizes and dimensions" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v17h17L4 3zM8 12v4h4zM4 8h2M4 12h2M4 16h2" /></g></svg>
+        </button>
+        <input type="checkbox" id="chk-dims" hidden />
+        <button id="btn-measure" class="fab" title="Measure distance (M)" aria-label="Measure distance" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-45 12 12)"><rect x="3" y="8" width="18" height="8" rx="1.5" /><path d="M7 8v3M11 8v2M15 8v3M19 8v2" /></g></svg>
+        </button>
+        <button id="view-scale" class="fab" title="View scale: 1× (click for 2×)" aria-label="2× view scale" aria-pressed="false">1×</button>
         <button id="btn-shot" class="fab" title="Save image">
-          <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4M9 2 7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.17L15 2z" /></svg>
+          <svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4M9 2 7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.17L15 2z" /></svg>
         </button>
         <button id="btn-compass" class="fab" title="Face north (N)">
           <svg viewBox="0 0 40 40"><g id="compass-needle"><path d="M20 5 25 20H15z" fill="#e8453c" /><path d="M20 35 15 20h10z" fill="#9aa0a6" /></g></svg>
@@ -180,12 +160,11 @@
           <span class="lbl"><svg viewBox="0 0 24 24"><path d="m11.99 18.54-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27z" /></svg>Photoreal</span>
         </button>
         <div class="layer-row card">
-          <button class="mini" id="tile-dims" title="Room sizes & dimensions (L)"><span class="mthumb">📐</span>Dimensions</button>
           <button class="mini" id="tile-ao" title="Ambient occlusion"><span class="mthumb">🌫️</span>Shading</button>
-          <button class="mini" id="tile-walk" title="Walk (V)"><span class="mthumb">🚶</span>Walk</button>
           <button class="mini" id="tile-more" title="More view options"><span class="mthumb">⋯</span>More</button>
         </div>
         <div id="pt-status"></div>
+      </div>
       </div>
 
       <!-- "More" card: view details -->
@@ -195,22 +174,6 @@
           <button class="icon close" data-close="details-card" title="Close"><svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg></button>
         </div>
         <div class="card-body">
-          <h4>Navigation</h4>
-          <div class="seg" id="mode">
-            <button data-v="orbit" class="on">Orbit</button>
-            <button data-v="walk">Walk (first-person)</button>
-          </div>
-          <label class="row">
-            <span>Lens</span>
-            <select id="lens">
-              <option value="auto" selected>Auto (ultra-wide indoors)</option>
-              <option value="13">13 mm · phone 0.5× ultra-wide</option>
-              <option value="16">16 mm · very wide</option>
-              <option value="20">20 mm · wide</option>
-              <option value="26">26 mm · phone 1× main camera</option>
-              <option value="35">35 mm · natural eye</option>
-            </select>
-          </label>
           <h4>Render</h4>
           <label class="row"><span>Exposure</span><input type="range" id="exposure" min="-2" max="2" step="0.05" value="0" /></label>
           <div class="checks">
@@ -218,16 +181,15 @@
             <label><input type="checkbox" id="chk-ao" checked /> Ambient occlusion</label>
           </div>
           <label class="row"><span>Tone mapping</span>
-            <select id="tone"><option value="aces">ACES Filmic</option><option value="agx">AgX</option><option value="neutral">Khronos Neutral</option></select>
+            <select id="tone"><option value="aces">ACES Filmic</option><option value="agx" selected>AgX · natural highlights</option><option value="neutral">Khronos Neutral</option></select>
           </label>
           <label class="row"><span>Render scale</span>
-            <select id="scale"><option value="1">100%</option><option value="0.75">75%</option><option value="0.5">50%</option></select>
+            <select id="scale"><option value="1.5">150% · extra detail</option><option value="1.25">125%</option><option value="1" selected>100%</option><option value="0.75">75%</option><option value="0.5">50%</option></select>
           </label>
         </div>
       </div>
     </div>
 
-    <div id="hint"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
