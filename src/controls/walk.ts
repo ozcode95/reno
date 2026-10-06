@@ -12,6 +12,7 @@ export class WalkControls {
   radius = 0.24;
   private vy = 0;
   private keys = new Set<string>();
+  private moveInput = new THREE.Vector2();
   private ray = new THREE.Raycaster();
   onLockChange?: (locked: boolean) => void;
 
@@ -23,9 +24,7 @@ export class WalkControls {
     });
     document.addEventListener('mousemove', (e) => {
       if (!this.enabled || !this.locked) return;
-      this.yaw -= e.movementX * 0.0021;
-      this.pitch -= e.movementY * 0.0021;
-      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
+      this.look(e.movementX, e.movementY);
     });
     window.addEventListener('keydown', (e) => {
       if (!this.enabled) return;
@@ -34,7 +33,20 @@ export class WalkControls {
       this.keys.add(e.code);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.setMoveInput(0, 0);
+    });
+  }
+
+  look(dx: number, dy: number) {
+    if (!this.enabled) return;
+    this.yaw -= dx * 0.0021;
+    this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch - dy * 0.0021));
+  }
+
+  setMoveInput(forward: number, strafe: number) {
+    this.moveInput.set(strafe, forward).clampLength(0, 1);
   }
 
   lock() {
@@ -66,6 +78,7 @@ export class WalkControls {
   disable() {
     this.enabled = false;
     this.keys.clear();
+    this.setMoveInput(0, 0);
     this.unlock();
   }
 
@@ -90,13 +103,13 @@ export class WalkControls {
     if (!this.enabled) return;
     dt = Math.min(dt, 0.05);
     const k = this.keys;
-    const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-    const s = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    const f = this.moveInput.y + (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+    const s = this.moveInput.x + (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     const speed = k.has('ShiftLeft') || k.has('ShiftRight') ? 3.4 : 1.45;
     if (f || s) {
       const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-      const mv = fwd.multiplyScalar(f).addScaledVector(right, s).normalize().multiplyScalar(speed * dt);
+      const mv = fwd.multiplyScalar(f).addScaledVector(right, s).clampLength(0, 1).multiplyScalar(speed * dt);
       // resolve per axis for wall sliding
       for (const axis of ['x', 'z'] as const) {
         const d = mv[axis];

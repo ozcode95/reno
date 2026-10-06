@@ -15,6 +15,7 @@ import { SkyEnvironment, makeInteriorEnv } from './env';
 import { sunPosition, sunTimes, fromMYT, mytParts, ymdOf, fmtClock, fmtDate, compass } from './solar';
 import { Post } from './post';
 import { WalkControls } from './controls/walk';
+import { MobileWalkControls, MOBILE_LAYOUT_QUERY } from './controls/mobile-walk';
 import { FurnitureDrag } from './controls/furniture-drag';
 import { MeasureTool, type Units } from './tools/measure';
 import { Annotations } from './tools/annotations';
@@ -118,6 +119,34 @@ function doorAt(ndcPt: THREE.Vector2, maxDist = Infinity) {
   const hit = rc.intersectObjects(colliders, false)[0];
   return hit ? doors.leafOf(hit.object) : undefined;
 }
+
+function interactAt(point: THREE.Vector2) {
+  if (measure.active) measure.click(point);
+  else doors.toggle(doorAt(point, 3));
+}
+
+const mobileLayout = window.matchMedia(MOBILE_LAYOUT_QUERY);
+let mobileToolsOpen = false;
+const mobileWalk = new MobileWalkControls(walk, renderer.domElement, $('mobile-walk'), {
+  interact: () => interactAt(new THREE.Vector2(0, 0)),
+  tap: (e) => interactAt(toNDC(e)),
+});
+
+function syncMobileWalk() {
+  mobileWalk.setEnabled(mode === 'walk' && mobileLayout.matches
+    && !mobileToolsOpen && !$('ui').classList.contains('hidden') && !document.hidden);
+}
+
+function setMobileTools(open: boolean) {
+  mobileToolsOpen = open;
+  $('ui').classList.toggle('tools-open', open);
+  $('btn-tools').setAttribute('aria-expanded', String(open));
+  $('tools-label').textContent = open ? 'Hide tools' : 'Tools';
+  syncMobileWalk();
+}
+
+mobileLayout.addEventListener('change', () => setMobileTools(false));
+document.addEventListener('visibilitychange', syncMobileWalk);
 
 /* ------------------------------------------------------------------ */
 /*  State                                                              */
@@ -321,6 +350,9 @@ function setMode(m: Mode) {
   finishFurnitureDrag();
   mode = m;
   $('btn-pegman').classList.toggle('active', m === 'walk');
+  $('btn-pegman').setAttribute('aria-pressed', String(m === 'walk'));
+  $('btn-pegman').setAttribute('aria-label', m === 'walk' ? 'Return to Orbit' : 'Walk through the house');
+  $('walk-mode-label').textContent = m === 'walk' ? 'Orbit' : 'Walk';
   if (m === 'walk') {
     tween = null;
     controls.enabled = false;
@@ -341,6 +373,8 @@ function setMode(m: Mode) {
     controls.update();
     document.body.classList.remove('walking');
   }
+  if (m === 'walk' && mobileLayout.matches) setMobileTools(false);
+  else syncMobileWalk();
 }
 
 function goToView(v: ViewPreset) {
@@ -579,6 +613,8 @@ function zoomBy(f: number) {
 function initUI() {
   const ui = $('ui');
   ui.classList.remove('hidden');
+  $('btn-tools').onclick = () => setMobileTools(!mobileToolsOpen);
+  setMobileTools(false);
   // floating cards (Google-Maps style): house info (☰), sun & time (expandable), view details ("More")
   const infoCard = $('info-card'), sunCard = $('sun-card'), detailsCard = $('details-card');
   const setInfo = (open: boolean) => {
@@ -589,6 +625,7 @@ function initUI() {
   const setSunCard = (open: boolean) => {
     sunCard.classList.toggle('open', open);
     if (open) setInfo(false);
+    if (open && mobileLayout.matches) setMobileTools(false);
   };
   const setDetails = (open: boolean) => {
     detailsCard.classList.toggle('open', open);
@@ -667,6 +704,7 @@ function initUI() {
     mBtn.classList.toggle('active', on);
     mBtn.setAttribute('aria-pressed', String(on));
     document.body.classList.toggle('measuring', on);
+    if (on && mobileLayout.matches) setMobileTools(true);
   };
   mBtn.onclick = () => setMeasure(!measure.active);
   $('btn-measure-close').onclick = () => setMeasure(false);
@@ -786,12 +824,12 @@ function initUI() {
       case 'KeyL': dimsBtn.click(); break;
       case 'KeyN': faceNorth(); break;
       case 'KeyT': setSunCard(!sunCard.classList.contains('open')); break;
-      case 'Escape': setInfo(false); setDetails(false); break;
+      case 'Escape': setInfo(false); setDetails(false); setMobileTools(false); break;
       case 'Digit1': setLevel('full'); break;
       case 'Digit2': setLevel('noroof'); break;
       case 'Digit3': setLevel('gf'); break;
       case 'KeyP': togglePT(); break;
-      case 'KeyH': ui.classList.toggle('hidden'); break;
+      case 'KeyH': ui.classList.toggle('hidden'); syncMobileWalk(); break;
       case 'KeyZ': if (e.ctrlKey) measure.undo(); break;
     }
   });
@@ -850,9 +888,9 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   downAt = null;
   if (moved > 5 || e.button !== 0) return;
   if (mode === 'walk') {
+    if (mobileLayout.matches) return;
     if (!walk.locked) walk.lock();
-    else if (measure.active) measure.click(new THREE.Vector2(0, 0));
-    else doors.toggle(doorAt(new THREE.Vector2(0, 0), 3));
+    else interactAt(new THREE.Vector2(0, 0));
     return;
   }
   if (measure.active) measure.click(toNDC(e));
@@ -929,6 +967,7 @@ window.addEventListener('resize', onResize);
 /*  Main loop                                                          */
 /* ------------------------------------------------------------------ */
 const clock = new THREE.Clock();
+let nextWalkActionUpdate = 0;
 function loop() {
   requestAnimationFrame(loop);
   const dt = clock.getDelta();
@@ -952,6 +991,12 @@ function loop() {
   updateLampShadows();
   updateCompass();
   if (doors.update(dt)) renderer.shadowMap.needsUpdate = true;
+  if (mobileWalk.enabled && performance.now() >= nextWalkActionUpdate) {
+    nextWalkActionUpdate = performance.now() + 100;
+    const leaf = measure.active ? undefined : doorAt(new THREE.Vector2(0, 0), 3);
+    mobileWalk.setAction(measure.active ? 'Place point' : leaf && !leaf.spec.group ? (leaf.open ? 'Close' : 'Open') : 'Open / Close',
+      measure.active ? 'Aim at a surface' : leaf?.spec.label ?? 'Aim at a door or window', measure.active || !!leaf);
+  }
 
   // exposure (eye adaptation)
   const tm = renderer.toneMapping;
