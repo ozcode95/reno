@@ -14,7 +14,7 @@ export class Post {
 
   constructor(private renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
     const size = renderer.getSize(new THREE.Vector2());
-    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: Math.min(4, renderer.capabilities.maxSamples) });
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType });
     this.composer = new EffectComposer(renderer, rt);
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
@@ -42,7 +42,7 @@ export class Post {
     this.composer.addPass(this.gtao);
     this.output = new OutputPass();
     this.composer.addPass(this.output);
-    // Smooth the final image too: the AO pass has its own non-MSAA depth/normal buffer.
+    // Smooth the final image without multisampling every HDR render target as well.
     this.composer.addPass(new SMAAPass());
   }
 
@@ -59,6 +59,9 @@ export class Post {
   setSize(w: number, h: number) {
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
+    // Soft contact shading needs fewer pixels than the final image.
+    const ratio = this.renderer.getPixelRatio() / 2;
+    this.gtao.setSize(Math.max(1, Math.ceil(w * ratio)), Math.max(1, Math.ceil(h * ratio)));
   }
 
   render(dt: number) {

@@ -104,7 +104,7 @@ clearance from the side wall. A separate flush ceiling light illuminates the ope
   - Sky and sun come from a CC0 HDRI (Poly Haven). The sun is extracted from the HDRI into a shadow-casting light, and it is positioned from the real solar position for Kuala Lumpur, clocked in Malaysia time (MYT, UTC+8): live by default, or pick any date / time. The house front faces south (north = −Z, east = +X in the scene).
   - Image-based lighting uses a partially white-balanced copy of the sky, which avoids the cold blue cast on shaded walls.
   - Interiors, and the covered porch, use a bounce-light environment instead of the blue sky.
-- **Exposure** is metered like a camera: a tiny HDR render of the view is read back several times per second. This lets you walk from the sunny street into the house and your eyes adapt. Photoreal mode meters the path-traced image itself.
+- **Exposure** is metered like a camera: a tiny HDR render is read back asynchronously when the view or lighting changes. This lets you walk from the sunny street into the house and your eyes adapt. Photoreal mode meters the path-traced image itself.
 - **Photoreal mode.**
   - Clear glass and lamp shades let direct light through in both rendering modes. The living window's
     smoke-grey glass casts shade in real-time mode; Photoreal mode transmits tinted light through it.
@@ -122,7 +122,7 @@ clearance from the side wall. A separate flush ceiling light illuminates the ope
   - grey concrete roof tiles
   - galvanised gate and cement porch
 
-- **Image quality.** AgX tone mapping is the default, with softer sun shadows, refined contact shading, MSAA plus final-pass SMAA, and support for device pixel ratios up to 2. The Render scale control also offers 125% and 150% for extra detail; it is separate from View scale.
+- **Image quality.** AgX tone mapping is the default, with softer sun shadows, contact shading at half resolution and final-pass SMAA. Render scale defaults to **Auto**, adapting resolution during navigation; the scene stops redrawing when still. Manual scales support device pixel ratios up to 2 and offer 125% and 150% for extra detail; Render scale is separate from View scale. Photoreal loads when first selected.
 
 ## Modelling assumptions
 

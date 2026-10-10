@@ -14,6 +14,7 @@ import { setMaxAnisotropy, canvasToTexture } from './builder/textures';
 import { SkyEnvironment, makeInteriorEnv } from './env';
 import { sunPosition, sunTimes, fromMYT, mytParts, ymdOf, fmtClock, fmtDate, compass } from './solar';
 import { Post } from './post';
+import { initialRenderQuality, updateRenderQuality } from './render-quality';
 import { WalkControls } from './controls/walk';
 import { MobileWalkControls, MOBILE_LAYOUT_QUERY } from './controls/mobile-walk';
 import { FurnitureDrag } from './controls/furniture-drag';
@@ -51,8 +52,10 @@ async function progress(msg: string) {
 const app = $('app');
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 const baseDPR = Math.min(window.devicePixelRatio, 2);
-let renderScale = 1;
-renderer.setPixelRatio(baseDPR);
+let renderScale: number | null = null;
+let renderQuality = initialRenderQuality(window.devicePixelRatio);
+let needsRender = true;
+renderer.setPixelRatio(renderQuality.pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -92,6 +95,7 @@ controls.target.set(3.05, 3.6, 10);
 
 const walk = new WalkControls(camera, renderer.domElement, () => colliders);
 const measure = new MeasureTool(camera, () => colliders);
+measure.onChange = invalidateRender;
 const furnitureDrag = new FurnitureDrag(camera, () => colliders);
 // Clear of the entrance passage, sofa and front media console; includes the whole table footprint.
 const coffeeTableArea = new THREE.Box2(
@@ -107,7 +111,7 @@ const pt = new PathTraceMode(renderer, scene, camera);
 // doors, window sashes and sliding glass panels are separate objects so they can move (front door closed by default)
 const doors = new Openables((k) => lib.get(k), (k) => lib.casts(k));
 doors.onSettled = () => {
-  renderer.shadowMap.needsUpdate = true;
+  invalidateShadows();
   if (pt.active) pt.rebuild();
 };
 /** the door leaf under a screen point (walls in front block it), within maxDist */
@@ -194,7 +198,7 @@ function setLevel(l: Level) {
   annotations.groups.ff.visible = l !== 'gf';
   $<HTMLSelectElement>('levels').value = l;
   refreshColliders();
-  renderer.shadowMap.needsUpdate = true;
+  invalidateShadows();
   nextLampShadowUpdate = 0;
   if (pt.active) pt.rebuild();
 }
@@ -282,6 +286,7 @@ function applyLamps(force = false) {
   for (const l of lampLights) l.light.intensity = l.base * (l.always ? 1 : k);
   lib.setLampLevel(k);
   nextLampShadowUpdate = 0;
+  invalidateRender();
   pt.environmentChanged();
   pt.materialsChanged();
 }
@@ -303,7 +308,7 @@ function updateLampShadows() {
       light.shadow.map.dispose();
       light.shadow.map = null;
     }
-    renderer.shadowMap.needsUpdate = true;
+    invalidateShadows();
   }
 }
 function setLightsMode(m: LightsMode) {
@@ -405,8 +410,8 @@ function goToFloorPlan(floor: 'gf' | 'ff') {
 /* ------------------------------------------------------------------ */
 /*  Exposure                                                           */
 /* ------------------------------------------------------------------ */
-// Metered like a camera: every 0.3 s the scene is rendered into a tiny linear HDR
-// target, and the centre-weighted log-average luminance drives the exposure.
+// Metered like a camera: a tiny linear HDR target is read asynchronously so
+// exposure adaptation does not stall navigation while waiting for the GPU.
 // Reference (k = 1) is the sunny front view, metered once at start-up.
 const METER_W = 64, METER_H = 40;
 const meterRT = new THREE.WebGLRenderTarget(METER_W, METER_H, { type: THREE.FloatType });
@@ -426,7 +431,9 @@ const meterQuad = new FullScreenQuad(
   }),
 );
 let meterPTNext = 0;
-function meterScene(src: THREE.Texture | null = null): number {
+let meterPending = false;
+let meterDirty = true;
+async function meterScene(src: THREE.Texture | null): Promise<number> {
   const prev = renderer.getRenderTarget();
   renderer.setRenderTarget(meterRT);
   if (src) {
@@ -436,7 +443,7 @@ function meterScene(src: THREE.Texture | null = null): number {
     renderer.render(scene, camera);
   }
   renderer.setRenderTarget(prev);
-  renderer.readRenderTargetPixels(meterRT, 0, 0, METER_W, METER_H, meterBuf);
+  await renderer.readRenderTargetPixelsAsync(meterRT, 0, 0, METER_W, METER_H, meterBuf);
   let sw = 0, sl = 0;
   for (let y = 0; y < METER_H; y++) {
     for (let x = 0; x < METER_W; x++) {
@@ -450,6 +457,17 @@ function meterScene(src: THREE.Texture | null = null): number {
   }
   return Math.exp(sl / sw);
 }
+async function updateExposureMeter(src: THREE.Texture | null): Promise<void> {
+  meterPending = true;
+  try {
+    const luminance = await meterScene(src);
+    if (src) meterPTK = THREE.MathUtils.clamp(Math.pow(meterRef / luminance, 0.9), 0.5, 45);
+    else meterK = THREE.MathUtils.clamp(Math.pow(meterRef / luminance, 0.8), 0.5, 4);
+    needsRender = true;
+  } finally {
+    meterPending = false;
+  }
+}
 /** raster only: lifts sky-lit shadows a little, like a phone camera's HDR mode */
 const RASTER_SKY_LIFT = 1.35;
 function inHouse(p: THREE.Vector3) {
@@ -461,21 +479,21 @@ function exposureFactor(): number {
     const tgt = pt.target;
     const now = performance.now();
     if (tgt && pt.samples >= 3 && meterRef > 0) {
-      if (now > meterPTNext) {
+      if (!meterPending && now > meterPTNext) {
         meterPTNext = now + 700;
-        meterPTK = THREE.MathUtils.clamp(Math.pow(meterRef / meterScene(tgt.texture), 0.9), 0.5, 45);
+        void updateExposureMeter(tgt.texture);
       }
-      return meterPTK;
+      if (meterPTK > 0) return meterPTK;
     }
     return meterPTK > 0 ? meterPTK : meterK * (inHouse(camera.position) && level === 'full' ? 10 : 1.1);
   }
   meterPTK = 0;
   const now = performance.now();
-  if (meterRef > 0 && now > meterNext) {
+  if (!meterPending && meterDirty && meterRef > 0 && now > meterNext) {
     meterNext = now + 300;
-    const L = meterScene();
+    meterDirty = false;
     // partial adaptation (exponent < 1): shade/interiors still read a bit darker than sun
-    meterK = THREE.MathUtils.clamp(Math.pow(meterRef / L, 0.8), 0.5, 4);
+    void updateExposureMeter(null);
   }
   return meterK;
 }
@@ -530,7 +548,7 @@ function applySunClock(force = false) {
   const dAz = Math.abs(((p.azimuth - env.azimuthDeg + 540) % 360) - 180);
   if (force || dAz > 0.2 || Math.abs(p.elevation - env.elevationDeg) > 0.2) {
     env.setSun(p.azimuth, p.elevation);
-    renderer.shadowMap.needsUpdate = true;
+    invalidateShadows();
     pt.environmentChanged();
   }
   applyLamps();
@@ -701,6 +719,7 @@ function initUI() {
   const mBtn = $('btn-measure');
   const setMeasure = (on: boolean) => {
     measure.setActive(on);
+    invalidateRender();
     mBtn.classList.toggle('active', on);
     mBtn.setAttribute('aria-pressed', String(on));
     document.body.classList.toggle('measuring', on);
@@ -783,12 +802,15 @@ function initUI() {
     pt.cameraMoved();
   };
   $<HTMLSelectElement>('scale').onchange = (e) => {
-    renderScale = Number((e.target as HTMLSelectElement).value);
+    const value = (e.target as HTMLSelectElement).value;
+    renderScale = value === 'auto' ? null : Number(value);
+    renderQuality = initialRenderQuality(window.devicePixelRatio);
     onResize();
   };
 
   const ptBtn = $('btn-pt');
   const togglePT = async () => {
+    invalidateRender();
     if (pt.active) {
       pt.disable();
       ptBtn.classList.remove('active');
@@ -854,7 +876,7 @@ function finishFurnitureDrag(notify = true) {
   controls.enabled = mode === 'orbit';
   renderer.domElement.style.cursor = '';
   downAt = null;
-  renderer.shadowMap.needsUpdate = true;
+  invalidateShadows();
   if (notify && pt.active) pt.rebuild();
   return true;
 }
@@ -874,7 +896,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 }, { capture: true });
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (furnitureDrag.active) {
-    if (e.pointerId === furnitureDrag.pointerId && furnitureDrag.move(toNDC(e))) renderer.shadowMap.needsUpdate = true;
+    if (e.pointerId === furnitureDrag.pointerId && furnitureDrag.move(toNDC(e))) invalidateShadows();
     return;
   }
   if (mode === 'orbit' && measure.active) measure.hover(toNDC(e));
@@ -952,7 +974,7 @@ function orbitFly(dt: number) {
 /* ------------------------------------------------------------------ */
 function onResize() {
   const w = window.innerWidth, h = window.innerHeight;
-  renderer.setPixelRatio(baseDPR * renderScale);
+  renderer.setPixelRatio(renderScale === null ? renderQuality.pixelRatio : baseDPR * renderScale);
   renderer.setSize(w, h);
   camera.aspect = w / h;
   camera.setFocalLength(focalNow);
@@ -960,17 +982,38 @@ function onResize() {
   css2d.setSize(w, h);
   measure.setResolution(w, h);
   pt.cameraMoved();
+  invalidateRender();
 }
 window.addEventListener('resize', onResize);
 
 /* ------------------------------------------------------------------ */
 /*  Main loop                                                          */
 /* ------------------------------------------------------------------ */
+function invalidateRender() {
+  needsRender = true;
+  meterDirty = true;
+}
+function invalidateShadows() {
+  renderer.shadowMap.needsUpdate = true;
+  invalidateRender();
+}
+for (const event of ['input', 'change', 'click']) document.addEventListener(event, invalidateRender);
+document.addEventListener('visibilitychange', () => {
+  clock.getDelta();
+  renderQuality = { ...renderQuality, elapsed: 0, frames: 0, cooldown: 2 };
+  invalidateRender();
+});
 const clock = new THREE.Clock();
 let nextWalkActionUpdate = 0;
+let renderedLastFrame = false;
 function loop() {
   requestAnimationFrame(loop);
-  const dt = clock.getDelta();
+  const frameDt = clock.getDelta();
+  if (document.hidden) {
+    renderedLastFrame = false;
+    return;
+  }
+  const dt = Math.min(frameDt, 0.1);
 
   if (tween) {
     const t = Math.min(1, (performance.now() - tween.start) / tween.dur);
@@ -990,7 +1033,7 @@ function loop() {
   updateLens(dt);
   updateLampShadows();
   updateCompass();
-  if (doors.update(dt)) renderer.shadowMap.needsUpdate = true;
+  if (doors.update(dt)) invalidateShadows();
   if (mobileWalk.enabled && performance.now() >= nextWalkActionUpdate) {
     nextWalkActionUpdate = performance.now() + 100;
     const leaf = measure.active ? undefined : doorAt(new THREE.Vector2(0, 0), 3);
@@ -998,22 +1041,40 @@ function loop() {
       measure.active ? 'Aim at a surface' : leaf?.spec.label ?? 'Aim at a door or window', measure.active || !!leaf);
   }
 
-  // exposure (eye adaptation)
-  const tm = renderer.toneMapping;
-  const target = tm === THREE.AgXToneMapping ? 1.0 : tm === THREE.NeutralToneMapping ? 0.85 : 0.62;
-  const k = autoExposure ? exposureFactor() : 1;
-  const want = target * Math.pow(2, baseEV) * k;
-  exposureNow += (want - exposureNow) * (1 - Math.exp(-dt * 2.2));
-  renderer.toneMappingExposure = exposureNow;
-
   camera.updateMatrixWorld();
   // tolerance based: damped controls produce endless micro-moves that would reset path tracing
-  if (camera.position.distanceToSquared(lastPos) > 1e-8 || camera.quaternion.angleTo(lastQuat) > 1e-5 || Math.abs(focalNow - lastFocal) > 0.02) {
+  const cameraChanged = camera.position.distanceToSquared(lastPos) > 1e-8
+    || camera.quaternion.angleTo(lastQuat) > 1e-5 || Math.abs(focalNow - lastFocal) > 0.02;
+  if (cameraChanged) {
     lastPos.copy(camera.position);
     lastQuat.copy(camera.quaternion);
     lastFocal = focalNow;
     pt.cameraMoved();
   }
+  if (cameraChanged) meterDirty = true;
+
+  // exposure (eye adaptation)
+  const tm = renderer.toneMapping;
+  const target = tm === THREE.AgXToneMapping ? 1.0 : tm === THREE.NeutralToneMapping ? 0.85 : 0.62;
+  const k = autoExposure ? exposureFactor() : 1;
+  const want = target * Math.pow(2, baseEV) * k;
+  const exposureChanged = Math.abs(want - exposureNow) > 0.0001;
+  exposureNow += (want - exposureNow) * (1 - Math.exp(-dt * 2.2));
+  renderer.toneMappingExposure = exposureNow;
+
+  if (!pt.active && !needsRender && !cameraChanged && !exposureChanged
+    && !measure.active && !furnitureDrag.active && !wantShot) {
+    renderedLastFrame = false;
+    renderQuality = { ...renderQuality, elapsed: 0, frames: 0 };
+    return;
+  }
+  if (renderScale === null && !pt.active && renderedLastFrame) {
+    const next = updateRenderQuality(renderQuality, frameDt, window.devicePixelRatio);
+    const resized = next.pixelRatio !== renderQuality.pixelRatio;
+    renderQuality = next;
+    if (resized) onResize();
+  }
+  renderedLastFrame = true;
 
   if (pt.active && pt.ready && !furnitureDrag.active) {
     pt.render();
@@ -1022,6 +1083,7 @@ function loop() {
     post.render(dt);
   }
   css2d.render(scene, camera);
+  needsRender = false;
 
   if (wantShot) {
     wantShot = false;
@@ -1077,7 +1139,7 @@ async function boot() {
     refreshColliders();
     initUI();
     setLevel('full');
-    renderer.shadowMap.needsUpdate = true;
+    invalidateShadows();
     await progress('Ready');
     $('loader').classList.add('done');
     const hero = VIEWS.find((v) => v.id === 'front-34')!;
@@ -1086,7 +1148,7 @@ async function boot() {
     camera.position.set(...hero.pos);
     camera.lookAt(...hero.target);
     camera.updateMatrixWorld();
-    meterRef = meterScene();
+    meterRef = await meterScene(null);
     // now switch the sun to the Malaysia clock
     paintDayTrack();
     tickLiveSun();
@@ -1095,7 +1157,7 @@ async function boot() {
     controls.target.copy(t0);
     controls.update();
     goToView(hero);
-    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__house = { scene, camera, renderer, controls, env, lib, groups, doors, setLevel, setRenovation, setInterior, setLightsMode, setMode, goToView, VIEWS, measure, walk, meter: () => ({ meterRef, meterK, L: meterScene() }) };
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__house = { scene, camera, renderer, controls, env, lib, post, pt, groups, doors, setLevel, setRenovation, setInterior, setLightsMode, setMode, goToView, VIEWS, measure, walk, meter: async () => ({ meterRef, meterK, L: await meterScene(null) }) };
     clock.getDelta();
     loop();
   } catch (err) {

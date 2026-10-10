@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { DenoiseMaterial, WebGLPathTracer } from 'three-gpu-pathtracer';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
+import type { WebGLPathTracer } from 'three-gpu-pathtracer';
+import type { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 
 /**
  * Progressive GPU path tracing (three-gpu-pathtracer). Gives physically
@@ -13,7 +13,7 @@ export class PathTraceMode {
   building = false;
   private pt: WebGLPathTracer | null = null;
   private worker: ParallelMeshBVHWorker | null = null;
-  private denoise = new DenoiseMaterial({ sigma: 2, kSigma: 1.5, threshold: 0.1 });
+  private initialization: Promise<void> | null = null;
   onStatus?: (s: string) => void;
 
   constructor(private renderer: THREE.WebGLRenderer, private scene: THREE.Scene, private camera: THREE.PerspectiveCamera) {}
@@ -29,7 +29,19 @@ export class PathTraceMode {
 
   async enable() {
     this.active = true;
+    this.initialization ??= this.initialize();
+    await this.initialization;
+    if (!this.building) await this.rebuild();
+  }
+
+  private async initialize(): Promise<void> {
     if (!this.pt) {
+      this.onStatus?.('Loading Photoreal renderer…');
+      const [{ DenoiseMaterial, WebGLPathTracer }, { ParallelMeshBVHWorker }] = await Promise.all([
+        import('three-gpu-pathtracer'),
+        import('three-mesh-bvh/worker'),
+      ]);
+      const denoise = new DenoiseMaterial({ sigma: 2, kSigma: 1.5, threshold: 0.1 });
       this.pt = new WebGLPathTracer(this.renderer);
       this.pt.bounces = 10;
       this.pt.transmissiveBounces = 12;
@@ -44,13 +56,13 @@ export class PathTraceMode {
       this.pt.renderToCanvasCallback = (target, renderer, quad) => {
         const original = quad.material;
         const autoClear = renderer.autoClear;
-        this.denoise.map = target.texture;
-        this.denoise.opacity = original.opacity;
-        this.denoise.blending = original.blending;
+        denoise.map = target.texture;
+        denoise.opacity = original.opacity;
+        denoise.blending = original.blending;
         // Ease filtering as the image converges, preserving the fine material detail.
-        this.denoise.sigma = this.samples < 64 ? 2 : 1.2;
-        this.denoise.threshold = 0.12 / Math.sqrt(Math.max(1, this.samples / 16)) / Math.max(0.25, renderer.toneMappingExposure);
-        quad.material = this.denoise;
+        denoise.sigma = this.samples < 64 ? 2 : 1.2;
+        denoise.threshold = 0.12 / Math.sqrt(Math.max(1, this.samples / 16)) / Math.max(0.25, renderer.toneMappingExposure);
+        quad.material = denoise;
         renderer.autoClear = false;
         try {
           quad.render(renderer);
@@ -66,7 +78,6 @@ export class PathTraceMode {
         this.worker = null;
       }
     }
-    await this.rebuild();
   }
 
   async rebuild() {
